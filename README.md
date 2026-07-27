@@ -1,6 +1,10 @@
-# Claude Code Credential Manager (`ccm`)
+<p align="center">
+  <img src="assets/icon.png" alt="ccm" width="128" height="128">
+</p>
 
-Switch between Claude Code accounts without signing in again.
+<h1 align="center">Claude Code Credential Manager (<code>ccm</code>)</h1>
+
+<p align="center">Switch between Claude Code accounts without signing in again.</p>
 
 Claude Code stores exactly one account's authentication state at a time. Signing into a second
 account overwrites the first one's refresh token, so returning to an account you used ten

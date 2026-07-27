@@ -14,6 +14,11 @@
   },
   "categories": ["Other"],
   "keywords": ["claude", "claude code", "account", "credentials", "switch"],
+  "icon": "icon.png",
+  "galleryBanner": {
+    "color": "#161715",
+    "theme": "dark"
+  },
   "activationEvents": ["onStartupFinished"],
   "main": "./out/extension.js",
   "contributes": {

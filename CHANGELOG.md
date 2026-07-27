@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-07-28
+
+### Added
+
+- Official project icon. The tray app now embeds the real artwork at 16, 32, 48, 64 and 128
+  pixels, each downsampled once from the 1254px original rather than scaled at runtime, and
+  assembles them into a multi-resolution Windows ICO so the shell picks the right one per display
+  scaling. The VS Code extension carries it as its marketplace icon.
+
+[0.1.1]: https://github.com/MAbbasRaza/claude-code-credential-manager/releases/tag/v0.1.1
+
 ## [0.1.0] - 2026-07-27
 
 First release. Verified by CI on Windows, macOS and Linux.
