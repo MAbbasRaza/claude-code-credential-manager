@@ -92,6 +92,20 @@ sha256_of() {
     fi
 }
 
+check_version_tag() {
+    # The tag is interpolated into a download URL, so reject anything that
+    # could steer that URL elsewhere, such as a value containing a slash or a
+    # traversal sequence.
+    [ "$VERSION" = latest ] && return 0
+    case "$VERSION" in
+        v[0-9]*.[0-9]*.[0-9]*|[0-9]*.[0-9]*.[0-9]*) ;;
+        *) fail "invalid CCM_VERSION '$VERSION'. Expected a tag such as v1.2.3, or 'latest'." ;;
+    esac
+    case "$VERSION" in
+        */*|*..*|*' '*) fail "invalid CCM_VERSION '$VERSION': must not contain a path separator." ;;
+    esac
+}
+
 release_url() {
     # $1 asset name
     if [ "$VERSION" = latest ]; then
@@ -179,6 +193,7 @@ path_hint() {
 
 main() {
     need uname
+    check_version_tag
     detect_platform
 
     TMPDIR_CCM=$(mktemp -d 2>/dev/null || mktemp -d -t ccm)

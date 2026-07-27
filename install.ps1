@@ -9,6 +9,18 @@
     Never requires administrator rights: everything lives under your profile and
     only the user PATH is modified, never the machine PATH.
 
+    Structural note: this script is designed to be run through `iex`, which
+    executes in the CALLER'S scope. That has two consequences the code works
+    around deliberately:
+
+      * `exit` would terminate the user's whole PowerShell session, discarding
+        the error message it had just printed. Failures therefore throw, are
+        caught at the boundary, and only convert to a real `exit` when the
+        script is being run as a file.
+      * Assigning $ErrorActionPreference or $ProgressPreference at top level
+        would permanently change the user's session. They are saved and
+        restored instead.
+
 .PARAMETER Version
     Release tag to install. Defaults to the latest release.
 
@@ -37,20 +49,14 @@ param(
     [switch]$NoVerify
 )
 
-$ErrorActionPreference = 'Stop'
-# Invoke-WebRequest is dramatically slower with the progress bar on 5.1.
-$ProgressPreference = 'SilentlyContinue'
-
 $Repo = 'MAbbasRaza/claude-code-credential-manager'
 
 function Write-Info { param([string]$Message) Write-Host $Message }
 function Write-Ok   { param([string]$Message) Write-Host $Message -ForegroundColor Green }
 function Write-Warn { param([string]$Message) Write-Host $Message -ForegroundColor Yellow }
-function Write-Fail {
-    param([string]$Message)
-    Write-Host "error: $Message" -ForegroundColor Red
-    exit 1
-}
+
+# Throws rather than exits. See the structural note above.
+function Write-Fail { param([string]$Message) throw $Message }
 
 function Get-Architecture {
     # PROCESSOR_ARCHITECTURE reports the *process* architecture, so a 32-bit
@@ -67,6 +73,17 @@ function Get-Architecture {
     }
 }
 
+function Test-VersionTag {
+    param([string]$Tag)
+    # The tag is interpolated into a download URL. Reject anything that could
+    # steer that URL somewhere else, such as a value containing a slash or a
+    # traversal sequence.
+    if ($Tag -eq 'latest') { return }
+    if ($Tag -notmatch '^v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.\-]+)?$') {
+        Write-Fail "invalid version '$Tag'. Expected a tag such as v1.2.3, or 'latest'."
+    }
+}
+
 function Get-ReleaseUrl {
     param([string]$Asset)
     if ($Version -eq 'latest') {
@@ -77,11 +94,7 @@ function Get-ReleaseUrl {
 
 function Get-RemoteFile {
     param([string]$Url, [string]$OutFile)
-    try {
-        Invoke-WebRequest -Uri $Url -OutFile $OutFile -UseBasicParsing
-    } catch {
-        throw "download failed for $Url : $($_.Exception.Message)"
-    }
+    Invoke-WebRequest -Uri $Url -OutFile $OutFile -UseBasicParsing
 }
 
 function Install-Asset {
@@ -132,102 +145,174 @@ function Install-Asset {
 function Add-ToUserPath {
     param([string]$Directory)
 
-    $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-    if (-not $userPath) { $userPath = '' }
-
-    # Compare case-insensitively and ignore a trailing slash, so repeated runs
-    # do not append duplicates.
-    $normalized = $Directory.TrimEnd('\')
-    $already = $false
-    foreach ($entry in $userPath.Split(';')) {
-        if ($entry -and ($entry.TrimEnd('\') -ieq $normalized)) { $already = $true; break }
+    # Written through the registry rather than
+    # [Environment]::SetEnvironmentVariable, which always writes REG_SZ. The
+    # user PATH is REG_EXPAND_SZ on a default Windows install, and downgrading
+    # it stops the system expanding any %VAR% entries it contains, silently
+    # breaking unrelated tools on the user's PATH. Reading with
+    # DoNotExpandEnvironmentNames keeps those entries symbolic.
+    $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
+    if (-not $key) {
+        Write-Fail "could not open HKCU\Environment to update PATH"
     }
 
-    if ($already) {
-        return $false
+    try {
+        $raw = $key.GetValue('Path', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+        if ($null -eq $raw) { $raw = '' }
+
+        $kind = [Microsoft.Win32.RegistryValueKind]::ExpandString
+        try {
+            $existingKind = $key.GetValueKind('Path')
+            if ($existingKind -eq [Microsoft.Win32.RegistryValueKind]::String -or
+                $existingKind -eq [Microsoft.Win32.RegistryValueKind]::ExpandString) {
+                $kind = $existingKind
+            }
+        } catch {
+            # No existing Path value; ExpandString is the sensible default.
+        }
+
+        # Compare case-insensitively and ignore a trailing slash, so repeated
+        # runs do not append duplicates.
+        $normalized = $Directory.TrimEnd('\')
+        foreach ($entry in $raw.Split(';')) {
+            if ($entry -and ($entry.TrimEnd('\') -ieq $normalized)) {
+                return $false
+            }
+        }
+
+        if ($raw -eq '') { $newPath = $Directory }
+        else { $newPath = $raw.TrimEnd(';') + ';' + $Directory }
+
+        $key.SetValue('Path', $newPath, $kind)
+    } finally {
+        $key.Close()
     }
 
-    if ($userPath -eq '') {
-        $newPath = $Directory
-    } else {
-        $newPath = $userPath.TrimEnd(';') + ';' + $Directory
-    }
-    [Environment]::SetEnvironmentVariable('Path', $newPath, 'User')
-
-    # Make it usable in this session too, so the next lines can run ccm.
+    # Usable in this session too, so the lines below can run ccm.
     $env:Path = $env:Path + ';' + $Directory
+
+    # Tell Explorer the environment changed, so newly launched terminals see it
+    # without a sign-out. Best effort; failure here is cosmetic.
+    try {
+        if (-not ('CcmNative' -as [type])) {
+            Add-Type -Namespace '' -Name 'CcmNative' -MemberDefinition @'
+[DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wParam,
+    string lParam, uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);
+'@ -ErrorAction Stop
+        }
+        $HWND_BROADCAST = [IntPtr]0xffff
+        $WM_SETTINGCHANGE = 0x1A
+        $result = [UIntPtr]::Zero
+        [void][CcmNative]::SendMessageTimeout($HWND_BROADCAST, $WM_SETTINGCHANGE,
+            [UIntPtr]::Zero, 'Environment', 2, 5000, [ref]$result)
+    } catch {
+        # Non-fatal: a new sign-in picks the change up regardless.
+    }
+
     return $true
 }
 
-# ---------------------------------------------------------------------------
+function Invoke-CcmInstall {
+    Test-VersionTag -Tag $Version
+    $arch = Get-Architecture
+    Write-Info "Installing ccm (windows/$arch, version $Version)"
+
+    $staging = Join-Path ([IO.Path]::GetTempPath()) ("ccm-install-" + [Guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Force -Path $staging | Out-Null
+
+    try {
+        # Hashtables compare keys case-insensitively, which would let an asset
+        # match a differently-cased entry. GitHub asset names are
+        # case-sensitive, so use an ordinal-comparing dictionary.
+        $checksums = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([StringComparer]::Ordinal)
+
+        if (-not $NoVerify) {
+            $sumsFile = Join-Path $staging 'SHA256SUMS'
+            try {
+                Get-RemoteFile -Url (Get-ReleaseUrl 'SHA256SUMS') -OutFile $sumsFile
+            } catch {
+                Write-Fail "could not download SHA256SUMS from the $Version release.`nEither that release does not exist, or the network blocked it.`n`nCheck https://github.com/$Repo/releases`nTo install without verification anyway, re-run with -NoVerify (not recommended)."
+            }
+            foreach ($line in (Get-Content $sumsFile)) {
+                # Format: "<hash>  <name>" or "<hash> *<name>" for binary mode.
+                if ($line -match '^([0-9a-fA-F]{64})\s+\*?(.+)$') {
+                    $checksums[$Matches[2].Trim()] = $Matches[1].ToLower()
+                }
+            }
+        }
+
+        Install-Asset -Asset "ccm-windows-$arch.exe" -TargetName 'ccm.exe' -Staging $staging -Checksums $checksums
+
+        if ($Tray) {
+            Install-Asset -Asset "ccm-tray-windows-$arch.exe" -TargetName 'ccm-tray.exe' -Staging $staging -Checksums $checksums
+        }
+
+        $added = Add-ToUserPath -Directory $InstallDir
+
+        $installedVersion = & (Join-Path $InstallDir 'ccm.exe') --version
+        Write-Ok ""
+        Write-Ok $installedVersion
+
+        if ($added) {
+            Write-Warn ""
+            Write-Warn "Added $InstallDir to your user PATH."
+            Write-Warn "Open a new terminal for it to take effect in other windows."
+        }
+
+        Write-Info ""
+        Write-Host "Next steps" -ForegroundColor White
+        Write-Info "  ccm init            pin your Claude Code config directory"
+        Write-Info "  ccm add work        save the account you are signed into now"
+        Write-Info ""
+        Write-Info "Capture your current account BEFORE running /logout in Claude Code."
+        Write-Info "Logging out destroys the refresh token there would be nothing left to save."
+    }
+    finally {
+        Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# --- boundary ---------------------------------------------------------------
+# Preferences are saved and restored because `iex` runs this in the caller's
+# scope, where leaving them changed would alter how the user's own shell
+# behaves for the rest of its life.
+
+$ccmPrevErrorAction = $ErrorActionPreference
+$ccmPrevProgress = $ProgressPreference
+$ccmPrevTls = $null
+try { $ccmPrevTls = [Net.ServicePointManager]::SecurityProtocol } catch { }
+
+$ErrorActionPreference = 'Stop'
+# Invoke-WebRequest is dramatically slower with the progress bar on 5.1.
+$ProgressPreference = 'SilentlyContinue'
 
 # Windows PowerShell 5.1 defaults to TLS 1.0 for outbound HTTPS, which GitHub
 # refuses. Without this the download fails with an unhelpful connection error.
 try {
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    [Net.ServicePointManager]::SecurityProtocol =
+        [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 } catch {
     # PowerShell 7 manages this itself and the property may be unavailable.
 }
 
-$arch = Get-Architecture
-Write-Info "Installing ccm (windows/$arch, version $Version)"
-
-$staging = Join-Path ([IO.Path]::GetTempPath()) ("ccm-install-" + [Guid]::NewGuid().ToString('N'))
-New-Item -ItemType Directory -Force -Path $staging | Out-Null
-
+$ccmFailed = $false
 try {
-    # Hashtables are case-insensitive by default, which would let
-    # ccm-windows-amd64.exe match a differently-cased entry. Asset names are
-    # case-sensitive on GitHub, so use an ordinal-comparing table.
-    $checksums = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([StringComparer]::Ordinal)
-
-    if (-not $NoVerify) {
-        $sumsFile = Join-Path $staging 'SHA256SUMS'
-        try {
-            Get-RemoteFile -Url (Get-ReleaseUrl 'SHA256SUMS') -OutFile $sumsFile
-        } catch {
-            Write-Fail "could not download SHA256SUMS from the $Version release.`nEither that release does not exist, or the network blocked it.`n`nCheck https://github.com/$Repo/releases`nTo install without verification anyway, re-run with -NoVerify (not recommended)."
-        }
-        foreach ($line in (Get-Content $sumsFile)) {
-            # Format: "<hash>  <name>" or "<hash> *<name>" for binary mode.
-            if ($line -match '^([0-9a-fA-F]{64})\s+\*?(.+)$') {
-                $checksums[$Matches[2].Trim()] = $Matches[1].ToLower()
-            }
-        }
-    }
-
-    Install-Asset -Asset "ccm-windows-$arch.exe" -TargetName 'ccm.exe' -Staging $staging -Checksums $checksums
-
-    if ($Tray) {
-        Install-Asset -Asset "ccm-tray-windows-$arch.exe" -TargetName 'ccm-tray.exe' -Staging $staging -Checksums $checksums
-    }
-
-    $added = Add-ToUserPath -Directory $InstallDir
-
-    $installedVersion = & (Join-Path $InstallDir 'ccm.exe') --version
-    Write-Ok ""
-    Write-Ok $installedVersion
-
-    if ($added) {
-        Write-Warn ""
-        Write-Warn "Added $InstallDir to your user PATH."
-        Write-Warn "Open a new terminal for it to take effect in other windows."
-    }
-
-    Write-Info ""
-    Write-Host "Next steps" -ForegroundColor White
-    Write-Info "  ccm init            pin your Claude Code config directory"
-    Write-Info "  ccm add work        save the account you are signed into now"
-    Write-Info ""
-    Write-Info "Capture your current account BEFORE running /logout in Claude Code."
-    Write-Info "Logging out destroys the refresh token there would be nothing left to save."
-}
-catch {
-    # Write-Fail already exits with a clean message, so anything reaching here
-    # is unexpected. Print it readably rather than dumping a PowerShell stack.
+    Invoke-CcmInstall
+} catch {
     Write-Host "error: $($_.Exception.Message)" -ForegroundColor Red
-    exit 1
+    $ccmFailed = $true
+} finally {
+    $ErrorActionPreference = $ccmPrevErrorAction
+    $ProgressPreference = $ccmPrevProgress
+    if ($null -ne $ccmPrevTls) {
+        try { [Net.ServicePointManager]::SecurityProtocol = $ccmPrevTls } catch { }
+    }
 }
-finally {
-    Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
+
+if ($ccmFailed) {
+    # Only a real file invocation may exit; under `irm | iex` that would close
+    # the user's session and throw away the message printed above.
+    if ($MyInvocation.MyCommand.Path) { exit 1 }
+    Write-Host "Installation failed." -ForegroundColor Red
 }
