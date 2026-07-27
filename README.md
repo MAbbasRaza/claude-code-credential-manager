@@ -63,51 +63,77 @@ installing the incoming one. This is the single most important thing it does.
 
 ## Install
 
-### From a release
-
-Download the binary for your platform from
-[Releases](https://github.com/MAbbasRaza/claude-code-credential-manager/releases), verify it, and
-put it on your `PATH`.
+**macOS and Linux**
 
 ```bash
-# macOS / Linux
-sha256sum -c SHA256SUMS --ignore-missing
-mv ccm_v0.1.0_darwin_arm64 /usr/local/bin/ccm
-chmod +x /usr/local/bin/ccm
+curl -fsSL https://raw.githubusercontent.com/MAbbasRaza/claude-code-credential-manager/main/install.sh | sh
 ```
+
+**Windows**
 
 ```powershell
-# Windows
-Get-FileHash .\ccm_v0.1.0_windows_amd64.exe -Algorithm SHA256    # compare against SHA256SUMS
-# then move it somewhere on your PATH, renamed to ccm.exe
+irm https://raw.githubusercontent.com/MAbbasRaza/claude-code-credential-manager/main/install.ps1 | iex
 ```
 
-Every release also ships `ccm-tray` (linux/amd64, darwin/arm64, windows/amd64 only, since it needs
-cgo) and `ccm-extension.vsix` for VS Code:
+Both installers detect your architecture, verify the download against the published
+`SHA256SUMS`, install into your home directory, and tell you how to fix your `PATH` if needed.
+Neither ever asks for `sudo` or administrator rights. Set `CCM_TRAY=1` (or pass `-Tray` on
+Windows) to install the tray app as well.
+
+<details>
+<summary>Other ways to install</summary>
+
+**Homebrew** (macOS, Linux)
+
+```bash
+brew install MAbbasRaza/tap/ccm
+```
+
+**Scoop** (Windows) — installs straight from the manifest, no bucket to add:
+
+```powershell
+scoop install https://raw.githubusercontent.com/MAbbasRaza/claude-code-credential-manager/main/packaging/scoop/ccm.json
+```
+
+**Go** — if you already have a toolchain:
+
+```bash
+go install github.com/MAbbasRaza/claude-code-credential-manager/cmd/ccm@latest
+```
+
+**Manually** — download from
+[Releases](https://github.com/MAbbasRaza/claude-code-credential-manager/releases), check it
+against `SHA256SUMS`, rename it to `ccm`, and put it on your `PATH`.
+
+**From source** — requires Go 1.24 or later:
+
+```bash
+git clone https://github.com/MAbbasRaza/claude-code-credential-manager.git
+cd claude-code-credential-manager
+go build -o ccm ./cmd/ccm
+go test ./... -count=1
+
+go build -o ccm-tray ./cmd/ccm-tray   # optional; needs cgo, and
+                                      # libayatana-appindicator3-dev on Linux
+```
+
+A `Makefile` wraps the common targets (`make build`, `make test`, `make check`). See
+[CONTRIBUTING.md](CONTRIBUTING.md) for the architecture map and the three invariants any change
+must preserve.
+
+</details>
+
+**VS Code extension** — download `ccm-extension.vsix` from the release, then:
 
 ```bash
 code --install-extension ccm-extension.vsix
 ```
 
-### From source
+### Uninstall
 
-Requires Go 1.24 or later. The CLI is pure Go and has no runtime dependencies.
-
-```bash
-git clone https://github.com/MAbbasRaza/claude-code-credential-manager.git
-cd claude-code-credential-manager
-
-go build -o ccm ./cmd/ccm
-go test ./... -count=1        # optional, but it is fast
-
-go build -o ccm-tray ./cmd/ccm-tray   # optional tray app; needs cgo off Windows
-```
-
-Building the tray on Linux additionally needs `libayatana-appindicator3-dev`. A `Makefile` wraps
-the common targets (`make build`, `make test`, `make check`) if you prefer.
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the development setup, the architecture map, and the
-three invariants any change has to preserve.
+Delete the binary, then remove `~/.config/ccm` and `~/.local/share/ccm` on Linux,
+`~/Library/Application Support/ccm` on macOS, or `%APPDATA%\ccm` and `%LOCALAPPDATA%\ccm` on
+Windows. Nothing is written outside those locations and your own Claude Code config directory.
 
 ## Getting started
 

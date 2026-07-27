@@ -1,0 +1,40 @@
+{
+    "architecture": {
+        "64bit": {
+            "hash": "0000000000000000000000000000000000000000000000000000000000000000",
+            "url": "https://github.com/MAbbasRaza/claude-code-credential-manager/releases/download/v0.0.0/ccm-windows-amd64.exe#/ccm.exe"
+        },
+        "arm64": {
+            "hash": "0000000000000000000000000000000000000000000000000000000000000000",
+            "url": "https://github.com/MAbbasRaza/claude-code-credential-manager/releases/download/v0.0.0/ccm-windows-arm64.exe#/ccm.exe"
+        }
+    },
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/MAbbasRaza/claude-code-credential-manager/releases/download/v$version/ccm-windows-amd64.exe#/ccm.exe"
+            },
+            "arm64": {
+                "url": "https://github.com/MAbbasRaza/claude-code-credential-manager/releases/download/v$version/ccm-windows-arm64.exe#/ccm.exe"
+            }
+        },
+        "hash": {
+            "url": "https://github.com/MAbbasRaza/claude-code-credential-manager/releases/download/v$version/SHA256SUMS"
+        }
+    },
+    "bin": "ccm.exe",
+    "checkver": {
+        "github": "https://github.com/MAbbasRaza/claude-code-credential-manager"
+    },
+    "description": "Switch between Claude Code accounts without signing in again",
+    "homepage": "https://github.com/MAbbasRaza/claude-code-credential-manager",
+    "license": "MIT",
+    "post_install": [
+        "Write-Host ''",
+        "Write-Host 'Next: run `ccm init` to pin your Claude Code config directory,' -ForegroundColor Green",
+        "Write-Host 'then `ccm add <name>` to save the account you are signed into now.' -ForegroundColor Green",
+        "Write-Host ''",
+        "Write-Host 'Capture your account BEFORE running /logout in Claude Code.' -ForegroundColor Yellow"
+    ],
+    "version": "0.0.0"
+}

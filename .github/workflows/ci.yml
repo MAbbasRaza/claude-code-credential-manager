@@ -143,6 +143,12 @@ jobs:
           cache: true
 
       # The CLI is pure Go, so every target cross-compiles from one runner.
+      #
+      # Asset names deliberately omit the version. GitHub's
+      # /releases/latest/download/<name> redirect only resolves a fixed
+      # filename, and that redirect is what makes the one-line installer work
+      # without an API call or a rate limit. The version is compiled in and
+      # reported by `ccm --version`.
       - name: Build
         env:
           GOOS: ${{ matrix.goos }}
@@ -150,7 +156,7 @@ jobs:
           CGO_ENABLED: '0'
         run: |
           version="${GITHUB_REF_NAME}"
-          name="ccm_${version}_${GOOS}_${GOARCH}"
+          name="ccm-${GOOS}-${GOARCH}"
           if [ "$GOOS" = "windows" ]; then name="${name}.exe"; fi
           mkdir -p dist
           go build -trimpath -ldflags "-s -w -X main.version=${version}" -o "dist/${name}" ./cmd/ccm
@@ -195,7 +201,7 @@ jobs:
           CGO_ENABLED: '1'
         run: |
           version="${GITHUB_REF_NAME}"
-          name="ccm-tray_${version}_${{ matrix.goos }}_${{ matrix.goarch }}"
+          name="ccm-tray-${{ matrix.goos }}-${{ matrix.goarch }}"
           if [ "${{ matrix.goos }}" = "windows" ]; then name="${name}.exe"; fi
           mkdir -p dist
           go build -trimpath -ldflags "-s -w -X main.version=${version}" -o "dist/${name}" ./cmd/ccm-tray
@@ -215,6 +221,12 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+
+      # Needed by the packaging-manifest updater below.
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
 
       - name: Collect build artifacts
         uses: actions/download-artifact@v4
@@ -269,3 +281,26 @@ jobs:
             --notes-file "$notes" \
             --verify-tag \
             dist/*
+
+      # Package manifests are updated after the release exists, because they
+      # embed the published checksums. This pushes to main, which re-runs the
+      # check and test jobs but not the release jobs, since those are gated on
+      # a tag ref.
+      - name: Update Scoop manifest and Homebrew formula
+        run: |
+          # Update on top of main rather than the detached tag checkout, so the
+          # commit has somewhere to land.
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout -B main origin/main
+
+          go run ./scripts/updatepackaging "${GITHUB_REF_NAME}" dist/SHA256SUMS
+
+          if git diff --quiet -- packaging/; then
+            echo "manifests already current"
+            exit 0
+          fi
+          git add packaging/
+          git commit -m "Update packaging manifests for ${GITHUB_REF_NAME}"
+          git push origin main
