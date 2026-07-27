@@ -1,0 +1,23 @@
+version: 2
+
+# This tool handles bearer credentials, so dependency drift is a security
+# concern rather than housekeeping. The dependency surface is deliberately tiny:
+# gjson/sjson for the JSON splicing core and systray for the tray app.
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    labels: [dependencies, go]
+
+  - package-ecosystem: npm
+    directory: /extension
+    schedule:
+      interval: weekly
+    labels: [dependencies, extension]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    labels: [dependencies, ci]

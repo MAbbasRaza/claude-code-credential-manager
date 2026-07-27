@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
@@ -10,6 +11,39 @@ permissions:
   contents: read
 
 jobs:
+  # Fast-failing gates. Formatting drift and known vulnerabilities should stop a
+  # PR before the three-platform matrix spends time on it.
+  check:
+    name: format, vet, vulnerabilities
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt-clean:"
+            echo "$unformatted"
+            echo
+            echo "Run: gofmt -w ."
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      # This tool handles bearer credentials, so a known-vulnerable dependency
+      # is a release blocker rather than a nice-to-know.
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
   test:
     name: test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -19,27 +53,23 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-go@v5
         with:
           go-version: '1.24'
           cache: true
 
-      # systray needs the Ayatana AppIndicator headers to build on Linux.
+      # systray binds Ayatana AppIndicator on Linux.
       - name: Install Linux tray dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libayatana-appindicator3-dev
 
-      - name: Vet
-        run: go vet ./...
-
       - name: Test
         run: go test ./... -count=1
 
-      # The race detector needs cgo and a C toolchain. Running it on Linux
-      # keeps the requirement to one runner rather than all three.
+      # The race detector needs cgo and a C toolchain. Running it on Linux keeps
+      # that requirement to one runner instead of all three.
       - name: Test with race detector
         if: runner.os == 'Linux'
         run: go test ./... -count=1 -race
@@ -64,55 +94,178 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: extension/package-lock.json
+
       - run: npm ci
         working-directory: extension
-      - run: npm run compile
+
+      - name: Compile
+        run: npm run compile
         working-directory: extension
 
-  release:
-    name: release artifacts
+      - name: Package VSIX
+        run: npx --yes @vscode/vsce package --out ccm-extension.vsix
+        working-directory: extension
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vsix
+          path: extension/ccm-extension.vsix
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # Release. Runs only for v* tags.
+  #
+  # Third-party actions are deliberately avoided in these jobs. For a tool that
+  # handles bearer credentials, every action granted contents:write is supply
+  # chain risk, so publishing uses the preinstalled GitHub CLI instead.
+  # ---------------------------------------------------------------------------
+
+  release-cli:
+    name: build CLI ${{ matrix.goos }}/${{ matrix.goarch }}
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [test, extension]
-    runs-on: ${{ matrix.os }}
-    permissions:
-      contents: write
+    needs: [check, test, extension]
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            goos: linux
-            goarch: amd64
-          - os: ubuntu-latest
-            goos: linux
-            goarch: arm64
-          - os: macos-latest
-            goos: darwin
-            goarch: arm64
-          - os: macos-latest
-            goos: darwin
-            goarch: amd64
-          - os: windows-latest
-            goos: windows
-            goarch: amd64
+          - { goos: linux, goarch: amd64 }
+          - { goos: linux, goarch: arm64 }
+          - { goos: darwin, goarch: amd64 }
+          - { goos: darwin, goarch: arm64 }
+          - { goos: windows, goarch: amd64 }
+          - { goos: windows, goarch: arm64 }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: '1.24'
+          cache: true
 
-      - name: Build CLI
-        shell: bash
+      # The CLI is pure Go, so every target cross-compiles from one runner.
+      - name: Build
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: '0'
         run: |
-          out="ccm-${GOOS}-${GOARCH}"
-          if [ "$GOOS" = "windows" ]; then out="${out}.exe"; fi
-          go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" -o "dist/${out}" ./cmd/ccm
+          version="${GITHUB_REF_NAME}"
+          name="ccm_${version}_${GOOS}_${GOARCH}"
+          if [ "$GOOS" = "windows" ]; then name="${name}.exe"; fi
+          mkdir -p dist
+          go build -trimpath -ldflags "-s -w -X main.version=${version}" -o "dist/${name}" ./cmd/ccm
 
-      - name: Upload
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: ccm-${{ matrix.goos }}-${{ matrix.goarch }}
+          name: cli-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/
+          if-no-files-found: error
+
+  release-tray:
+    name: build tray ${{ matrix.goos }}/${{ matrix.goarch }}
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [check, test, extension]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, goos: linux, goarch: amd64 }
+          - { os: macos-latest, goos: darwin, goarch: arm64 }
+          - { os: windows-latest, goos: windows, goarch: amd64 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: Install Linux tray dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libayatana-appindicator3-dev
+
+      # The tray needs cgo for Cocoa and AppIndicator, so each target is built
+      # on its own runner for that runner's architecture only. Cross-compiling
+      # it is not supported; see README for which tray builds ship.
+      - name: Build
+        shell: bash
+        env:
+          CGO_ENABLED: '1'
+        run: |
+          version="${GITHUB_REF_NAME}"
+          name="ccm-tray_${version}_${{ matrix.goos }}_${{ matrix.goarch }}"
+          if [ "${{ matrix.goos }}" = "windows" ]; then name="${name}.exe"; fi
+          mkdir -p dist
+          go build -trimpath -ldflags "-s -w -X main.version=${version}" -o "dist/${name}" ./cmd/ccm-tray
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tray-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    name: publish release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [release-cli, release-tray]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Collect build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: staging
+
+      - name: Flatten and checksum
+        run: |
+          mkdir -p dist
+          find staging -type f -exec cp {} dist/ \;
+          cd dist
+          echo "Release assets:"
+          ls -la
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME}"
+          notes="$(mktemp)"
+          {
+            echo "## Install"
+            echo
+            echo "Download the binary for your platform, verify it against \`SHA256SUMS\`, rename it"
+            echo "to \`ccm\` (or \`ccm.exe\`), and put it on your \`PATH\`."
+            echo
+            echo '```'
+            echo "sha256sum -c SHA256SUMS --ignore-missing"
+            echo '```'
+            echo
+            echo "On macOS and Linux, mark it executable: \`chmod +x ccm\`."
+            echo
+            echo "Then run \`ccm init\` once to pin your Claude Code config directory."
+            echo
+            echo "### Tray app"
+            echo
+            echo "\`ccm-tray\` requires cgo and ships only for linux/amd64, darwin/arm64 and"
+            echo "windows/amd64. Other platforms can build it from source."
+            echo
+            echo "### VS Code extension"
+            echo
+            echo "\`ccm-extension.vsix\` installs with:"
+            echo '```'
+            echo "code --install-extension ccm-extension.vsix"
+            echo '```'
+          } > "$notes"
+
+          gh release create "$version" \
+            --title "$version" \
+            --notes-file "$notes" \
+            --verify-tag \
+            dist/*

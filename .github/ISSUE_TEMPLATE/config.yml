@@ -1,0 +1,12 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/MAbbasRaza/claude-code-credential-manager/security/advisories/new
+    about: >
+      Report privately through a security advisory. Do not open a public issue for anything that
+      could expose credentials.
+  - name: Claude Code itself
+    url: https://github.com/anthropics/claude-code/issues
+    about: >
+      ccm is an unofficial third-party tool. Bugs in Claude Code, including login and credential
+      storage behaviour, belong upstream.

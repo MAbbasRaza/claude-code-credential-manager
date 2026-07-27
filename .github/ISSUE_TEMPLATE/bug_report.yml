@@ -1,0 +1,77 @@
+name: Bug report
+description: Something ccm did wrong
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Do not paste tokens.** Never include the contents of `.credentials.json` or your vault
+        file. `ccm doctor` output is safe to share: it reports paths, sizes, expiry timestamps and
+        account emails, never token material.
+
+        If this is a security vulnerability, report it privately through the Security tab instead.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you run, and what did ccm do?
+      placeholder: |
+        I ran `ccm use work` and it reported success, but Claude Code still showed the old account
+        after I restarted it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: ccm doctor output
+      description: Run `ccm doctor` and paste the full output. This is safe to share.
+      render: text
+    validations:
+      required: true
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Which surface
+      multiple: true
+      options:
+        - CLI (ccm)
+        - System tray (ccm-tray)
+        - VS Code extension
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system and version
+      placeholder: Windows 11 26100 / macOS 15.2 / Ubuntu 24.04
+    validations:
+      required: true
+
+  - type: input
+    id: claude-version
+    attributes:
+      label: Claude Code version
+      description: Output of `claude --version`
+      placeholder: 2.1.6
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I closed Claude Code before switching, or used --force deliberately
+        - label: I have not pasted any token material in this report
+          required: true

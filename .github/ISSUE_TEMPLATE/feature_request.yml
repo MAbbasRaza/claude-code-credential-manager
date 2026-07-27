@@ -1,0 +1,39 @@
+name: Feature request
+description: Suggest a capability or improvement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you hitting
+      description: >
+        Describe the situation rather than the solution. What are you trying to do, and where does
+        ccm get in the way today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like it to do
+    validations:
+      required: true
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Which surface would this affect
+      multiple: true
+      options:
+        - CLI (ccm)
+        - System tray (ccm-tray)
+        - VS Code extension
+        - Documentation
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: Including doing nothing, or doing it by hand today.

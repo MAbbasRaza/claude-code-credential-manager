@@ -8,7 +8,7 @@ minutes ago requires a full browser authorization round trip. `ccm` parks each a
 in a vault and swaps it back in on demand, turning an account switch into an offline, sub-second
 operation.
 
-```
+```text
 $ ccm list
 * work       jc@example.com        max
   personal   me@example.com        pro
@@ -63,15 +63,51 @@ installing the incoming one. This is the single most important thing it does.
 
 ## Install
 
-Download a binary from [Releases](https://github.com/MAbbasRaza/claude-code-credential-manager/releases)
-and put it on your `PATH`, or build from source:
+### From a release
+
+Download the binary for your platform from
+[Releases](https://github.com/MAbbasRaza/claude-code-credential-manager/releases), verify it, and
+put it on your `PATH`.
 
 ```bash
-go build -o ccm ./cmd/ccm
-go build -o ccm-tray ./cmd/ccm-tray   # optional tray app
+# macOS / Linux
+sha256sum -c SHA256SUMS --ignore-missing
+mv ccm_v0.1.0_darwin_arm64 /usr/local/bin/ccm
+chmod +x /usr/local/bin/ccm
 ```
 
-Requires Go 1.24 or later to build. The CLI has no runtime dependencies.
+```powershell
+# Windows
+Get-FileHash .\ccm_v0.1.0_windows_amd64.exe -Algorithm SHA256    # compare against SHA256SUMS
+# then move it somewhere on your PATH, renamed to ccm.exe
+```
+
+Every release also ships `ccm-tray` (linux/amd64, darwin/arm64, windows/amd64 only, since it needs
+cgo) and `ccm-extension.vsix` for VS Code:
+
+```bash
+code --install-extension ccm-extension.vsix
+```
+
+### From source
+
+Requires Go 1.24 or later. The CLI is pure Go and has no runtime dependencies.
+
+```bash
+git clone https://github.com/MAbbasRaza/claude-code-credential-manager.git
+cd claude-code-credential-manager
+
+go build -o ccm ./cmd/ccm
+go test ./... -count=1        # optional, but it is fast
+
+go build -o ccm-tray ./cmd/ccm-tray   # optional tray app; needs cgo off Windows
+```
+
+Building the tray on Linux additionally needs `libayatana-appindicator3-dev`. A `Makefile` wraps
+the common targets (`make build`, `make test`, `make check`) if you prefer.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the development setup, the architecture map, and the
+three invariants any change has to preserve.
 
 ## Getting started
 
@@ -92,7 +128,7 @@ signing in normally.
 
 ## Commands
 
-```
+```text
 ccm                            interactive account picker
 ccm init                       detect and pin the Claude Code config directory
 ccm list                       list profiles, marking the active one
@@ -209,8 +245,26 @@ merge, capturing tokens on the way out so profiles do not rot, resolving the con
 explicitly rather than trusting an inherited environment variable, and refusing to switch under a
 running Claude Code process.
 
+## Contributing
+
+Contributions are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md), which covers the
+development setup, the architecture, and the three invariants that silently corrupt state when
+broken.
+
+Two things worth knowing up front:
+
+- **Never test against your real account.** Every test here uses synthetic tokens in a temporary
+  directory. The contributing guide explains how to build a scratch installation.
+- **macOS verification is especially valuable.** The Keychain backend is implemented and unit
+  tested, but the full switch cycle has only ever been exercised on Windows.
+
+Security issues go through a private
+[security advisory](https://github.com/MAbbasRaza/claude-code-credential-manager/security/advisories/new),
+never a public issue. See [SECURITY.md](SECURITY.md).
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
 
-Not affiliated with or endorsed by Anthropic.
+Not affiliated with or endorsed by Anthropic. `ccm` reads and writes Claude Code's local
+credential files, which are an internal, unversioned format that can change without notice.
