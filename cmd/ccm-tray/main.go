@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"sync"
 
 	"fyne.io/systray"
 
@@ -32,12 +33,24 @@ func onReady() {
 	rebuild()
 }
 
+// rebuildMu serializes menu rebuilds.
+//
+// rebuild is reached from every profile-click goroutine plus the Refresh and
+// Capture handlers, so without this two rebuilds can interleave. systray's
+// ResetMenu snapshots the item map and closes each removed item's channel, and
+// two overlapping snapshots can both reach the same item, panicking with
+// "close of closed channel".
+var rebuildMu sync.Mutex
+
 // rebuild tears down and re-creates the menu.
 //
 // systray has no way to remove items once added, so switching accounts marks
 // the whole menu stale and the app rebuilds it by resetting the tray. Keeping
 // this in one place avoids a menu that drifts out of sync with the vault.
 func rebuild() {
+	rebuildMu.Lock()
+	defer rebuildMu.Unlock()
+
 	systray.ResetMenu()
 
 	m, err := manager.Open("")
@@ -82,18 +95,10 @@ func rebuild() {
 
 	systray.AddSeparator()
 	refresh := systray.AddMenuItem("Refresh", "Re-read profiles and active account")
-	go func() {
-		for range refresh.ClickedCh {
-			rebuild()
-		}
-	}()
+	go onClick(refresh.ClickedCh, rebuild)
 
 	capture := systray.AddMenuItem("Capture current login…", "Save the signed-in account as a new profile")
-	go func() {
-		for range capture.ClickedCh {
-			capturePrompt()
-		}
-	}()
+	go onClick(capture.ClickedCh, capturePrompt)
 
 	addQuit()
 }
@@ -104,18 +109,18 @@ func switchTooltip(name string) string {
 
 // watch handles clicks on one profile entry.
 func watch(item *systray.MenuItem, name string) {
-	for range item.ClickedCh {
+	onClick(item.ClickedCh, func() {
 		mgr, err := manager.Open("")
 		if err != nil {
 			notify("ccm", "Error: "+err.Error())
-			continue
+			return
 		}
 		res, err := mgr.Switch(name, false)
 		if err != nil {
 			// The running-Claude-Code guard lands here, and its message is the
 			// actionable part, so it is surfaced verbatim.
 			notify("ccm could not switch", firstLine(err.Error()))
-			continue
+			return
 		}
 		msg := "Switched to " + res.To
 		if res.ToEmail != "" {
@@ -123,7 +128,7 @@ func watch(item *systray.MenuItem, name string) {
 		}
 		notify(msg, "Restart Claude Code for it to take effect.")
 		rebuild()
-	}
+	})
 }
 
 // capturePrompt saves the live login under an auto-derived name. The tray has
@@ -149,10 +154,9 @@ func addDisabled(label string) {
 
 func addQuit() {
 	q := systray.AddMenuItem("Quit", "Exit the tray app")
-	go func() {
-		<-q.ClickedCh
-		systray.Quit()
-	}()
+	// Must go through onClick. A bare receive here treated ResetMenu's channel
+	// close as a click and quit the app on the first rebuild after a switch.
+	go onClick(q.ClickedCh, systray.Quit)
 }
 
 func orUnknown(s string) string {

@@ -272,10 +272,7 @@ func cmdRemove(g globalOpts, name string) error {
 	if err != nil {
 		return err
 	}
-	if err := m.Vault.Delete(name); err != nil {
-		return err
-	}
-	if err := m.Vault.Save(); err != nil {
+	if err := m.Remove(name); err != nil {
 		return err
 	}
 	if g.jsonOut {

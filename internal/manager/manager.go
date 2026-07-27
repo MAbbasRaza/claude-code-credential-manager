@@ -156,6 +156,31 @@ func (m *Manager) lockPath() string {
 	return filepath.Join(filepath.Dir(m.Vault.Path), "ccm.lock")
 }
 
+// withVaultLock serializes a vault mutation across every ccm surface.
+//
+// Two things happen here, and the second is easy to miss. The lock stops the
+// CLI, the tray and the VS Code extension from mutating at once. The re-read
+// then discards the copy loaded during Open, which was read before this lock
+// existed: without it, a switch begun at T0 would save a vault snapshot that
+// silently reverts an `ccm add` completed at T1. Every mutating entry point
+// goes through here so the single-writer guarantee in SECURITY.md is real
+// rather than aspirational.
+func (m *Manager) withVaultLock(operation string, fn func() error) error {
+	lk, err := lock.Acquire(m.lockPath(), operation)
+	if err != nil {
+		return err
+	}
+	defer lk.Release()
+
+	fresh, err := vault.Open(m.Settings.VaultPath)
+	if err != nil {
+		return fmt.Errorf("re-read vault under lock: %w", err)
+	}
+	m.Vault = fresh
+
+	return fn()
+}
+
 // EnsureClosed refuses to proceed while Claude Code is running.
 //
 // A detection failure is treated as unsafe rather than safe: if ccm cannot
@@ -195,6 +220,30 @@ func (m *Manager) EnsureClosed(force bool) error {
 // When name is empty the profile is named after the account's email local part,
 // which is how an unrecognised login is parked rather than discarded.
 func (m *Manager) Capture(name string) (*vault.Profile, error) {
+	var out *vault.Profile
+	err := m.withVaultLock("capture "+name, func() error {
+		p, err := m.captureLocked(name)
+		out = p
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// Remove deletes a profile under the vault lock.
+func (m *Manager) Remove(name string) error {
+	return m.withVaultLock("remove "+name, func() error {
+		if err := m.Vault.Delete(name); err != nil {
+			return err
+		}
+		return m.Vault.Save()
+	})
+}
+
+// captureLocked requires the vault lock to be held and the vault freshly read.
+func (m *Manager) captureLocked(name string) (*vault.Profile, error) {
 	creds, id, err := m.readLive()
 	if err != nil {
 		if errors.Is(err, patch.ErrNoCredentials) {
@@ -311,84 +360,102 @@ func (m *Manager) Switch(target string, force bool) (Result, error) {
 	var res Result
 	res.To = target
 
-	tp, err := m.Vault.Get(target)
-	if err != nil {
-		return res, err
-	}
-	if err := patch.ValidateCredentials(tp.ClaudeAiOauth); err != nil {
-		return res, fmt.Errorf("profile %q is unusable: %w", target, err)
-	}
+	// Checked before taking the lock: it is a read, and refusing early avoids
+	// holding the lock while the user reads a multi-line explanation.
 	if err := m.EnsureClosed(force); err != nil {
 		return res, err
 	}
 
-	lk, err := lock.Acquire(m.lockPath(), "switch to "+target)
+	err := m.withVaultLock("switch to "+target, func() error {
+		return m.switchLocked(target, &res)
+	})
+	return res, err
+}
+
+// switchLocked requires the vault lock to be held and the vault freshly read.
+func (m *Manager) switchLocked(target string, res *Result) error {
+	tp, err := m.Vault.Get(target)
 	if err != nil {
-		return res, err
+		return err
 	}
-	defer lk.Release()
+	if err := patch.ValidateCredentials(tp.ClaudeAiOauth); err != nil {
+		return fmt.Errorf("profile %q is unusable: %w", target, err)
+	}
 
 	blob, err := m.Store.LoadBlob()
 	if err != nil {
-		return res, err
+		return err
 	}
 	cfg, err := m.readConfigJSON()
 	if err != nil {
-		return res, err
+		return err
 	}
 
 	backupDir, err := m.backup(blob, cfg)
 	if err != nil {
-		return res, fmt.Errorf("backup before switch: %w", err)
+		return fmt.Errorf("backup before switch: %w", err)
 	}
 	res.BackupDir = backupDir
 
 	// Capture the outgoing account. Failures here are fatal by design: losing
 	// the live refresh token is exactly the problem this tool exists to solve,
 	// so ccm will not trade it away to complete a switch.
-	if capturedName, isNew, email, err := m.captureOutgoing(blob, cfg, target); err != nil {
-		return res, err
-	} else {
-		res.CapturedAs, res.CapturedNew, res.FromEmail = capturedName, isNew, email
-		res.From = capturedName
+	capturedName, isNew, email, err := m.captureOutgoing(blob, cfg)
+	if err != nil {
+		return err
+	}
+	res.CapturedAs, res.CapturedNew, res.FromEmail = capturedName, isNew, email
+	res.From = capturedName
+
+	// Persist the captured outgoing tokens BEFORE overwriting the live
+	// documents that hold them. If the process dies between these steps, the
+	// worst case is a vault that is merely ahead of the files on disk; the
+	// reverse ordering would destroy a rotated refresh token outright, which
+	// is unrecoverable without a browser sign-in.
+	if capturedName != "" {
+		if err := m.Vault.Save(); err != nil {
+			return fmt.Errorf("captured the outgoing account but could not save the vault (%w); "+
+				"nothing was changed", err)
+		}
 	}
 
 	newBlob, err := patch.SetCredentials(blob, tp.ClaudeAiOauth)
 	if err != nil {
-		return res, err
+		return err
 	}
 	newCfg, err := patch.SetIdentity(cfg, patch.Identity{
 		OAuthAccount: tp.OAuthAccount,
 		UserID:       tp.UserID,
 	})
 	if err != nil {
-		return res, err
+		return err
 	}
 
 	if err := m.Store.SaveBlob(newBlob); err != nil {
-		return res, err
+		return err
 	}
 	if err := config.WriteFileAtomic(m.Paths.ConfigJSONPath, newCfg, 0o600); err != nil {
 		// The credentials document is already updated. Say so plainly rather
 		// than leaving the user to discover a half-applied switch.
-		return res, fmt.Errorf("credentials were updated but %s could not be written (%w); "+
+		return fmt.Errorf("credentials were updated but %s could not be written (%w); "+
 			"state is inconsistent, restore from %s", m.Paths.ConfigJSONPath, err, backupDir)
 	}
 
 	tp.LastUsedAt = time.Now().UTC()
 	m.Vault.Put(tp)
 	if err := m.Vault.Save(); err != nil {
-		return res, fmt.Errorf("switch applied but vault could not be saved: %w", err)
+		return fmt.Errorf("switch applied but vault could not be saved: %w", err)
 	}
 
 	res.Switched = true
 	res.ToEmail = tp.EmailAddress
 	res.RestartWarning = "Restart Claude Code for the new account to take effect."
-	return res, nil
+	return nil
 }
 
-// captureOutgoing writes the live account back to its profile.
-func (m *Manager) captureOutgoing(blob, cfg []byte, target string) (name string, isNew bool, email string, err error) {
+// captureOutgoing writes the live account back to its profile in memory. The
+// caller persists the vault before touching the live documents.
+func (m *Manager) captureOutgoing(blob, cfg []byte) (name string, isNew bool, email string, err error) {
 	creds, credErr := patch.ReadCredentials(blob)
 	if errors.Is(credErr, patch.ErrNoCredentials) {
 		return "", false, "", nil // nothing signed in, nothing to preserve
@@ -439,9 +506,22 @@ func (m *Manager) captureOutgoing(blob, cfg []byte, target string) (name string,
 }
 
 // backup copies both documents before any write.
+//
+// The timestamp has one-second resolution, so two switches within the same
+// second would collide. Rather than overwrite what may be the only copy of a
+// working credential set, a colliding name gets a suffix.
 func (m *Manager) backup(blob, cfg []byte) (string, error) {
 	stamp := time.Now().UTC().Format("20060102T150405Z")
-	dir := filepath.Join(filepath.Dir(m.Vault.Path), "backups", stamp)
+	base := filepath.Join(filepath.Dir(m.Vault.Path), "backups", stamp)
+
+	dir := base
+	for i := 2; ; i++ {
+		if _, err := os.Stat(dir); os.IsNotExist(err) {
+			break
+		}
+		dir = fmt.Sprintf("%s-%d", base, i)
+	}
+
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
 	}
