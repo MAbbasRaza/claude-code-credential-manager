@@ -105,7 +105,7 @@ go install github.com/MAbbasRaza/claude-code-credential-manager/cmd/ccm@latest
 [Releases](https://github.com/MAbbasRaza/claude-code-credential-manager/releases), check it
 against `SHA256SUMS`, rename it to `ccm`, and put it on your `PATH`.
 
-**From source** — requires Go 1.24 or later:
+**From source** — requires Go 1.25 or later:
 
 ```bash
 git clone https://github.com/MAbbasRaza/claude-code-credential-manager.git
@@ -198,9 +198,25 @@ Settings file location (override with `CCM_HOME`):
 {
   "claudeConfigDir": "/path/to/claude/config",
   "vaultPath": "",
-  "requireClosedSessions": true
+  "requireClosedSessions": true,
+  "credentialsBackend": "auto"
 }
 ```
+
+### macOS over SSH or in tmux
+
+On macOS Claude Code keeps credentials in the Keychain, which is unavailable in exactly the
+situations where switching accounts is most useful: an SSH session, a tmux pane detached from the
+login session, or CI. Claude Code falls back to reading `~/.claude/.credentials.json` when that
+file exists, so you can point `ccm` at the file instead:
+
+```bash
+ccm config set credentialsBackend file
+# or, for one command only:
+CCM_CREDENTIALS_BACKEND=file ccm use work
+```
+
+Valid values are `auto` (default, the platform's normal store), `file`, and `keychain`.
 
 ## Where your tokens are stored
 

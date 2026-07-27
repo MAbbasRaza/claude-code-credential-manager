@@ -29,6 +29,12 @@ type Settings struct {
 	// A pointer so an absent key defaults to true rather than false.
 	RequireClosedSessions *bool `json:"requireClosedSessions,omitempty"`
 
+	// CredentialsBackend forces "file" or "keychain" instead of the platform
+	// default. Mainly for macOS over SSH or in tmux, where the Keychain is
+	// locked but Claude Code still reads ~/.claude/.credentials.json.
+	// Empty or "auto" uses the platform default.
+	CredentialsBackend string `json:"credentialsBackend,omitempty"`
+
 	path string
 }
 

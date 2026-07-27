@@ -8,9 +8,12 @@
 package config
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 // Source identifies which precedence level supplied the config directory.
@@ -40,6 +43,18 @@ const EnvClaudeConfigDir = "CLAUDE_CONFIG_DIR"
 // EnvCCMConfigDir is ccm's override, used when a user wants to point ccm at a
 // different installation than the ambient CLAUDE_CONFIG_DIR names.
 const EnvCCMConfigDir = "CCM_CLAUDE_CONFIG_DIR"
+
+// EnvCredentialsBackend forces which credential store to use, overriding the
+// per-platform default. Values: "auto" (default), "file", "keychain".
+//
+// This exists for macOS. Claude Code normally uses the Keychain there, but the
+// Keychain is unavailable in exactly the situations where account switching is
+// most useful: an SSH session, a tmux pane detached from the login session, or
+// CI. Claude Code itself falls back to reading ~/.claude/.credentials.json when
+// that file exists, so pointing ccm at the file is a supported escape hatch
+// rather than a hack. It also lets the test suite exercise the real switch
+// logic on macOS without touching a developer's actual Keychain.
+const EnvCredentialsBackend = "CCM_CREDENTIALS_BACKEND"
 
 // KeychainService is the macOS Keychain generic-password item Claude Code uses.
 const KeychainService = "Claude Code-credentials"
@@ -107,12 +122,36 @@ func (r *Resolver) goos() string {
 // a directory. Levels 1 and 2 are per-invocation escape hatches; level 3 is what
 // makes the CLI, tray and extension agree even when they inherit different
 // environments.
-func (r *Resolver) Resolve(flagDir, settingsDir string) (Paths, error) {
+// backendPref is the value of the settings file's credentialsBackend key, or
+// empty. The CCM_CREDENTIALS_BACKEND environment variable takes precedence
+// over it, matching how the config directory levels are ordered.
+func (r *Resolver) Resolve(flagDir, settingsDir, backendPref string) (Paths, error) {
 	dir, src, err := r.resolveDir(flagDir, settingsDir)
 	if err != nil {
 		return Paths{}, err
 	}
-	return r.pathsFor(dir, src)
+	if env := r.getenv(EnvCredentialsBackend); env != "" {
+		backendPref = env
+	}
+	return r.pathsFor(dir, src, backendPref)
+}
+
+// ErrBadBackend reports an unrecognized credentials backend preference.
+var ErrBadBackend = errors.New("unknown credentials backend")
+
+// ParseBackendPref validates a backend preference string. Empty and "auto"
+// both mean "use the platform default".
+func ParseBackendPref(v string) (Backend, error) {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "", "auto":
+		return "", nil
+	case "file":
+		return BackendFile, nil
+	case "keychain", "macos-keychain":
+		return BackendKeychain, nil
+	default:
+		return "", fmt.Errorf("%w %q (valid: auto, file, keychain)", ErrBadBackend, v)
+	}
 }
 
 func (r *Resolver) resolveDir(flagDir, settingsDir string) (string, Source, error) {
@@ -143,7 +182,7 @@ func (r *Resolver) resolveDir(flagDir, settingsDir string) (string, Source, erro
 // CLAUDE_CONFIG_DIR is set, both move inside that directory. Treating .claude.json
 // as always living next to .credentials.json silently targets a file Claude Code
 // never reads.
-func (r *Resolver) pathsFor(dir string, src Source) (Paths, error) {
+func (r *Resolver) pathsFor(dir string, src Source, backendPref string) (Paths, error) {
 	p := Paths{Dir: dir, Source: src}
 
 	if src == SourceDefault {
@@ -156,14 +195,27 @@ func (r *Resolver) pathsFor(dir string, src Source) (Paths, error) {
 		p.ConfigJSONPath = filepath.Join(dir, ".claude.json")
 	}
 
-	if r.goos() == "darwin" {
-		// macOS keeps credentials in the Keychain regardless of
-		// CLAUDE_CONFIG_DIR, but .claude.json is still an ordinary file.
-		p.Backend = BackendKeychain
-		p.CredentialsPath = ""
-	} else {
-		p.Backend = BackendFile
+	forced, err := ParseBackendPref(backendPref)
+	if err != nil {
+		return Paths{}, err
+	}
+
+	backend := forced
+	if backend == "" {
+		if r.goos() == "darwin" {
+			// macOS keeps credentials in the Keychain regardless of
+			// CLAUDE_CONFIG_DIR, but .claude.json is still an ordinary file.
+			backend = BackendKeychain
+		} else {
+			backend = BackendFile
+		}
+	}
+
+	p.Backend = backend
+	if backend == BackendFile {
 		p.CredentialsPath = filepath.Join(dir, ".credentials.json")
+	} else {
+		p.CredentialsPath = ""
 	}
 	return p, nil
 }

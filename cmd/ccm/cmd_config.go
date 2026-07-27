@@ -18,7 +18,7 @@ func cmdInit(g globalOpts) error {
 
 	// Deliberately ignore any already-pinned value so init re-detects and can
 	// correct a directory that was pinned wrongly or has since moved.
-	paths, err := r.Resolve(g.configDir, "")
+	paths, err := r.Resolve(g.configDir, "", s.CredentialsBackend)
 	if err != nil {
 		return err
 	}
@@ -70,6 +70,11 @@ func cmdConfig(g globalOpts, args []string) error {
 			fmt.Printf("claudeConfigDir       = %s\n", orUnset(s.ClaudeConfigDir))
 			fmt.Printf("vaultPath             = %s\n", orUnset(s.VaultPath))
 			fmt.Printf("requireClosedSessions = %t\n", s.ShouldRequireClosedSessions())
+			backend := s.CredentialsBackend
+			if backend == "" {
+				backend = "auto (platform default)"
+			}
+			fmt.Printf("credentialsBackend    = %s\n", backend)
 			return nil
 		}
 		v, err := getKey(s, args[1])
@@ -118,8 +123,13 @@ func getKey(s *config.Settings, key string) (string, error) {
 		return s.VaultPath, nil
 	case "requireClosedSessions":
 		return strconv.FormatBool(s.ShouldRequireClosedSessions()), nil
+	case "credentialsBackend":
+		if s.CredentialsBackend == "" {
+			return "auto", nil
+		}
+		return s.CredentialsBackend, nil
 	default:
-		return "", fmt.Errorf("unknown key %q (valid: claudeConfigDir, vaultPath, requireClosedSessions)", key)
+		return "", fmt.Errorf("unknown key %q (valid: claudeConfigDir, vaultPath, requireClosedSessions, credentialsBackend)", key)
 	}
 }
 
@@ -162,7 +172,18 @@ func setKey(s *config.Settings, key, value string) error {
 		s.RequireClosedSessions = &b
 		return nil
 
+	case "credentialsBackend":
+		if _, err := config.ParseBackendPref(value); err != nil {
+			return err
+		}
+		if value == "auto" {
+			s.CredentialsBackend = ""
+		} else {
+			s.CredentialsBackend = value
+		}
+		return nil
+
 	default:
-		return fmt.Errorf("unknown key %q (valid: claudeConfigDir, vaultPath, requireClosedSessions)", key)
+		return fmt.Errorf("unknown key %q (valid: claudeConfigDir, vaultPath, requireClosedSessions, credentialsBackend)", key)
 	}
 }

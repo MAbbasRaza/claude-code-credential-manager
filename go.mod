@@ -1,6 +1,9 @@
 module github.com/MAbbasRaza/claude-code-credential-manager
 
-go 1.24
+// 1.25 is the floor because of GO-2026-4971, a net.Dial panic reachable from
+// the tray app through systray.Run. It is fixed in the standard library at
+// go1.25.10, and govulncheck gates the build on it.
+go 1.25
 
 require (
 	fyne.io/systray v1.12.2

@@ -33,8 +33,8 @@ out of every MCP connector, or destroy a refresh token and force a browser re-au
 
 | Component | Needs |
 |---|---|
-| CLI (`cmd/ccm`) | Go 1.24+. Pure Go, cross-compiles anywhere. |
-| Tray (`cmd/ccm-tray`) | Go 1.24+, plus cgo on macOS and Linux. On Linux: `libayatana-appindicator3-dev`. |
+| CLI (`cmd/ccm`) | Go 1.25+. Pure Go, cross-compiles anywhere. |
+| Tray (`cmd/ccm-tray`) | Go 1.25+, plus cgo on macOS and Linux. On Linux: `libayatana-appindicator3-dev`. |
 | Extension (`extension/`) | Node 22+. |
 
 ## Build and test
@@ -121,6 +121,12 @@ Claude Code stores credentials differently per platform, and the differences are
 - **Windows and Linux** use `.credentials.json` in the config directory.
 - In the **default** layout the two files are not siblings: credentials live in `~/.claude/` while
   `.claude.json` sits at `~/.claude.json`. Setting `CLAUDE_CONFIG_DIR` moves both inside it.
+
+**Tests that touch the credentials store must force the file backend.** Set
+`CCM_CREDENTIALS_BACKEND=file` (as `newEnv` in `internal/manager` does). Without it a test that
+writes a synthetic `.credentials.json` passes on Windows and Linux but fails on macOS, where the
+manager reads the Keychain and never sees the file. The first CI run on macOS failed for exactly
+this reason.
 
 Contributions that can only be tested on one platform are welcome, but say so in the PR. macOS
 verification is especially valuable; the original author could only test on Windows.

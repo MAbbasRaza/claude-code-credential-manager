@@ -41,7 +41,7 @@ func Open(flagConfigDir string) (*Manager, error) {
 		return nil, err
 	}
 	r := config.NewResolver()
-	paths, err := r.Resolve(flagConfigDir, s.ClaudeConfigDir)
+	paths, err := r.Resolve(flagConfigDir, s.ClaudeConfigDir, s.CredentialsBackend)
 	if err != nil {
 		return nil, err
 	}

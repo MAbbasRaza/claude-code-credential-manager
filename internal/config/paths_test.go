@@ -65,7 +65,7 @@ func TestResolvePrecedence(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			r := fakeResolver("linux", home, tc.env)
-			got, err := r.Resolve(tc.flag, tc.settings)
+			got, err := r.Resolve(tc.flag, tc.settings, "")
 			if err != nil {
 				t.Fatalf("Resolve: %v", err)
 			}
@@ -89,7 +89,7 @@ func TestConfigJSONLocationAsymmetry(t *testing.T) {
 
 	t.Run("default layout keeps .claude.json at home root", func(t *testing.T) {
 		r := fakeResolver("linux", home, map[string]string{})
-		p, err := r.Resolve("", "")
+		p, err := r.Resolve("", "", "")
 		if err != nil {
 			t.Fatalf("Resolve: %v", err)
 		}
@@ -103,7 +103,7 @@ func TestConfigJSONLocationAsymmetry(t *testing.T) {
 
 	t.Run("explicit dir puts both inside it", func(t *testing.T) {
 		r := fakeResolver("linux", home, map[string]string{EnvClaudeConfigDir: "/opt/claude"})
-		p, err := r.Resolve("", "")
+		p, err := r.Resolve("", "", "")
 		if err != nil {
 			t.Fatalf("Resolve: %v", err)
 		}
@@ -121,7 +121,7 @@ func TestBackendPerPlatform(t *testing.T) {
 
 	t.Run("darwin uses the keychain and ignores CLAUDE_CONFIG_DIR for credentials", func(t *testing.T) {
 		r := fakeResolver("darwin", home, map[string]string{EnvClaudeConfigDir: "/opt/claude"})
-		p, err := r.Resolve("", "")
+		p, err := r.Resolve("", "", "")
 		if err != nil {
 			t.Fatalf("Resolve: %v", err)
 		}
@@ -140,7 +140,7 @@ func TestBackendPerPlatform(t *testing.T) {
 	for _, goos := range []string{"windows", "linux"} {
 		t.Run(goos+" uses a file", func(t *testing.T) {
 			r := fakeResolver(goos, home, map[string]string{EnvClaudeConfigDir: "/opt/claude"})
-			p, err := r.Resolve("", "")
+			p, err := r.Resolve("", "", "")
 			if err != nil {
 				t.Fatalf("Resolve: %v", err)
 			}
@@ -152,6 +152,73 @@ func TestBackendPerPlatform(t *testing.T) {
 			}
 		})
 	}
+}
+
+// macOS puts credentials in the Keychain, which is unreachable over SSH, in a
+// detached tmux session, and in CI. Claude Code itself falls back to reading
+// ~/.claude/.credentials.json when that file exists, so forcing the file
+// backend is a supported escape hatch. This also lets the manager tests run on
+// macOS without touching a real Keychain.
+func TestCredentialsBackendOverride(t *testing.T) {
+	const home = "/home/u"
+	env := map[string]string{EnvClaudeConfigDir: "/opt/claude"}
+
+	t.Run("file backend can be forced on darwin", func(t *testing.T) {
+		r := fakeResolver("darwin", home, env)
+		p, err := r.Resolve("", "", "file")
+		if err != nil {
+			t.Fatalf("Resolve: %v", err)
+		}
+		if p.Backend != BackendFile {
+			t.Errorf("Backend = %q, want %q", p.Backend, BackendFile)
+		}
+		if want := filepath.Join("/opt/claude", ".credentials.json"); p.CredentialsPath != want {
+			t.Errorf("CredentialsPath = %q, want %q", p.CredentialsPath, want)
+		}
+	})
+
+	t.Run("keychain can be forced on linux", func(t *testing.T) {
+		r := fakeResolver("linux", home, env)
+		p, err := r.Resolve("", "", "keychain")
+		if err != nil {
+			t.Fatalf("Resolve: %v", err)
+		}
+		if p.Backend != BackendKeychain {
+			t.Errorf("Backend = %q, want %q", p.Backend, BackendKeychain)
+		}
+		if p.CredentialsPath != "" {
+			t.Errorf("CredentialsPath = %q, want empty for the keychain backend", p.CredentialsPath)
+		}
+	})
+
+	t.Run("auto and empty use the platform default", func(t *testing.T) {
+		for _, pref := range []string{"", "auto", "AUTO", "  auto  "} {
+			p, err := fakeResolver("darwin", home, env).Resolve("", "", pref)
+			if err != nil {
+				t.Fatalf("Resolve(%q): %v", pref, err)
+			}
+			if p.Backend != BackendKeychain {
+				t.Errorf("Resolve(%q) Backend = %q, want the darwin default %q", pref, p.Backend, BackendKeychain)
+			}
+		}
+	})
+
+	t.Run("the environment variable overrides the settings value", func(t *testing.T) {
+		withEnv := map[string]string{EnvClaudeConfigDir: "/opt/claude", EnvCredentialsBackend: "file"}
+		p, err := fakeResolver("darwin", home, withEnv).Resolve("", "", "keychain")
+		if err != nil {
+			t.Fatalf("Resolve: %v", err)
+		}
+		if p.Backend != BackendFile {
+			t.Errorf("Backend = %q, want the env override %q", p.Backend, BackendFile)
+		}
+	})
+
+	t.Run("an unknown value is rejected rather than silently defaulted", func(t *testing.T) {
+		if _, err := fakeResolver("linux", home, env).Resolve("", "", "sqlite"); err == nil {
+			t.Fatal("expected an error for an unknown backend")
+		}
+	})
 }
 
 // The failure this pinning exists to prevent: a CLI started from a shell
@@ -166,11 +233,11 @@ func TestSplitResolutionBetweenCLIAndGUI(t *testing.T) {
 	guiEnv := map[string]string{}                           // desktop-launched
 
 	t.Run("without a pinned setting the surfaces disagree", func(t *testing.T) {
-		cli, err := fakeResolver("linux", home, cliEnv).Resolve("", "")
+		cli, err := fakeResolver("linux", home, cliEnv).Resolve("", "", "")
 		if err != nil {
 			t.Fatal(err)
 		}
-		gui, err := fakeResolver("linux", home, guiEnv).Resolve("", "")
+		gui, err := fakeResolver("linux", home, guiEnv).Resolve("", "", "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -184,11 +251,11 @@ func TestSplitResolutionBetweenCLIAndGUI(t *testing.T) {
 
 	t.Run("after ccm init pins the directory both agree", func(t *testing.T) {
 		pinned := actual
-		cli, err := fakeResolver("linux", home, cliEnv).Resolve("", pinned)
+		cli, err := fakeResolver("linux", home, cliEnv).Resolve("", pinned, "")
 		if err != nil {
 			t.Fatal(err)
 		}
-		gui, err := fakeResolver("linux", home, guiEnv).Resolve("", pinned)
+		gui, err := fakeResolver("linux", home, guiEnv).Resolve("", pinned, "")
 		if err != nil {
 			t.Fatal(err)
 		}

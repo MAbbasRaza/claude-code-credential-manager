@@ -62,6 +62,13 @@ func newEnv(t *testing.T) (claudeDir string) {
 	t.Setenv("CCM_CLAUDE_CONFIG_DIR", "")
 	t.Setenv("CCM_HOME", ccmHome)
 
+	// Force the file backend. Without this these tests pass on Windows and
+	// Linux but fail on macOS, where the default backend is the Keychain: the
+	// synthetic .credentials.json written below would be ignored and the
+	// manager would read the developer's real Keychain instead. CI caught
+	// exactly that.
+	t.Setenv("CCM_CREDENTIALS_BACKEND", "file")
+
 	// Real Claude Code processes are almost certainly running on a developer
 	// machine, and that check is not what these tests exercise.
 	settings := `{"claudeConfigDir":` + quote(claudeDir) + `,"requireClosedSessions":false}`
