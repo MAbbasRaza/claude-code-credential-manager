@@ -210,8 +210,41 @@ func (m *Manager) Capture(name string) (*vault.Profile, error) {
 		return nil, err
 	}
 
+	// One account must map to exactly one profile. Storing the same account
+	// twice looks harmless but breaks capture-on-switch: only one of the
+	// duplicates receives the refreshed tokens, and the other silently decays
+	// into a dead refresh token that forces a browser re-authorization.
+	if existing, found := m.Vault.FindByAccountUUID(id.AccountUUID); found {
+		if name != "" && name != existing.Name {
+			return nil, fmt.Errorf(
+				"account %s is already saved as profile %q.\n"+
+					"Storing it twice would break switching: only one copy would receive refreshed\n"+
+					"tokens and the other would go stale. To rename it, run `ccm rm %s` first,\n"+
+					"or just run `ccm add %s` to refresh the existing profile.",
+				orUnknownEmail(id.EmailAddress), existing.Name, existing.Name, existing.Name)
+		}
+		// Same profile, or no name given: refresh it in place.
+		existing.ClaudeAiOauth = creds.ClaudeAiOauth
+		existing.OAuthAccount = id.OAuthAccount
+		existing.UserID = id.UserID
+		existing.EmailAddress = id.EmailAddress
+		existing.OrganizationName = id.OrganizationName
+		if existing.Label == "" {
+			existing.Label = id.EmailAddress
+		}
+		m.Vault.Put(existing)
+		return existing, m.Vault.Save()
+	}
+
 	if name == "" {
 		name = m.Vault.UniqueName(defaultProfileName(id.EmailAddress))
+	} else if clash, err := m.Vault.Get(name); err == nil && clash.AccountUUID != id.AccountUUID {
+		// The name is taken by a different account. Overwriting would discard
+		// that account's only stored refresh token.
+		return nil, fmt.Errorf(
+			"profile %q already holds a different account (%s).\n"+
+				"Pick another name, or run `ccm rm %s` first if you no longer need it.",
+			name, orUnknownEmail(clash.EmailAddress), name)
 	}
 
 	p := &vault.Profile{
@@ -225,11 +258,15 @@ func (m *Manager) Capture(name string) (*vault.Profile, error) {
 		UserID:           id.UserID,
 		CreatedAt:        time.Now().UTC(),
 	}
-	if existing, err := m.Vault.Get(name); err == nil {
-		p.CreatedAt = existing.CreatedAt
-	}
 	m.Vault.Put(p)
 	return p, m.Vault.Save()
+}
+
+func orUnknownEmail(s string) string {
+	if s == "" {
+		return "unknown account"
+	}
+	return s
 }
 
 func defaultProfileName(email string) string {

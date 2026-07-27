@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"os"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/MAbbasRaza/claude-code-credential-manager/internal/config"
@@ -18,8 +20,14 @@ type doctorReport struct {
 	Resolved   manager.Status    `json:"resolved"`
 	Files      []doctorFile      `json:"files"`
 	Vault      doctorVault       `json:"vault"`
+	Duplicates []doctorDuplicate `json:"duplicateAccounts,omitempty"`
 	Running    []doctorProc      `json:"runningClaudeProcesses"`
 	Warnings   []string          `json:"warnings"`
+}
+
+type doctorDuplicate struct {
+	AccountUUID string   `json:"accountUuid"`
+	Profiles    []string `json:"profiles"`
 }
 
 type doctorCandidate struct {
@@ -105,6 +113,20 @@ func cmdDoctor(g globalOpts) error {
 			rep.Vault.Expired++
 		}
 	}
+	// Duplicates predate the guard in Capture, so an older vault can still
+	// hold them. They are worth flagging loudly: only one copy receives
+	// refreshed tokens, and the other decays into a dead refresh token.
+	for uuid, names := range m.Vault.DuplicateAccounts() {
+		rep.Duplicates = append(rep.Duplicates, doctorDuplicate{AccountUUID: uuid, Profiles: names})
+		rep.Warnings = append(rep.Warnings, fmt.Sprintf(
+			"Profiles %s all hold the same account. Only one will receive refreshed tokens; "+
+				"the others will go stale. Remove the extras with `ccm rm <name>`.",
+			strings.Join(names, ", ")))
+	}
+	sort.Slice(rep.Duplicates, func(i, j int) bool {
+		return rep.Duplicates[i].AccountUUID < rep.Duplicates[j].AccountUUID
+	})
+
 	if rep.Vault.Expired > 0 {
 		rep.Warnings = append(rep.Warnings, fmt.Sprintf(
 			"%d profile(s) hold an expired access token. ccm can still install them, but if the "+

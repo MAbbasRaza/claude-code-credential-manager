@@ -198,16 +198,52 @@ func (v *Vault) Get(name string) (*Profile, error) {
 
 // FindByAccountUUID locates the profile holding a given account, which is how
 // a live login is matched back to its parked slot during capture.
+//
+// Iteration is over sorted names rather than the map directly. Go randomizes
+// map order, so if a vault ever does contain two profiles for one account, a
+// map-order match would write the refreshed tokens into a different profile on
+// each run and let the other silently rot. Capture prevents such duplicates
+// from being created, but a deterministic lookup means a vault that already has
+// them behaves predictably instead of losing a token at random.
 func (v *Vault) FindByAccountUUID(uuid string) (*Profile, bool) {
-	if uuid == "" {
+	matches := v.FindAllByAccountUUID(uuid)
+	if len(matches) == 0 {
 		return nil, false
 	}
-	for _, p := range v.doc.Profiles {
+	return matches[0], true
+}
+
+// FindAllByAccountUUID returns every profile holding an account, sorted by
+// name. More than one means the vault has duplicates, which `ccm doctor`
+// reports so the user can remove the extras.
+func (v *Vault) FindAllByAccountUUID(uuid string) []*Profile {
+	if uuid == "" {
+		return nil
+	}
+	var out []*Profile
+	for _, p := range v.List() {
 		if p.AccountUUID == uuid {
-			return p, true
+			out = append(out, p)
 		}
 	}
-	return nil, false
+	return out
+}
+
+// DuplicateAccounts returns the account UUIDs stored under more than one
+// profile name, mapped to those names.
+func (v *Vault) DuplicateAccounts() map[string][]string {
+	byUUID := map[string][]string{}
+	for _, p := range v.List() {
+		if p.AccountUUID != "" {
+			byUUID[p.AccountUUID] = append(byUUID[p.AccountUUID], p.Name)
+		}
+	}
+	for uuid, names := range byUUID {
+		if len(names) < 2 {
+			delete(byUUID, uuid)
+		}
+	}
+	return byUUID
 }
 
 // Put inserts or replaces a profile.

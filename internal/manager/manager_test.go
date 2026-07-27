@@ -228,6 +228,152 @@ func TestCaptureOnSwitchPicksUpBackgroundRefresh(t *testing.T) {
 	}
 }
 
+// Regression: one account must map to exactly one profile.
+//
+// Saving an account twice looks harmless and is easy to do by accident, but it
+// silently breaks the tool's central guarantee. Capture-on-switch updates the
+// profile matching the live account; with two matches only one is refreshed and
+// the other decays into a dead refresh token, which forces the browser
+// re-authorization this tool exists to eliminate.
+func TestCaptureRefusesDuplicateAccountUnderAnotherName(t *testing.T) {
+	dir := newEnv(t)
+	writeLive(t, dir, credsDoc("A-ACCESS", "A-REFRESH"), configDoc("acct-a", "a@example.invalid"))
+
+	m, err := Open("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Capture("work"); err != nil {
+		t.Fatalf("first capture: %v", err)
+	}
+
+	_, err = m.Capture("work-again")
+	if err == nil {
+		t.Fatal("expected the second capture of the same account to be refused")
+	}
+	if !strings.Contains(err.Error(), "work") {
+		t.Errorf("error should name the existing profile, got: %v", err)
+	}
+	if n := len(m.Vault.List()); n != 1 {
+		t.Errorf("vault holds %d profiles, want 1", n)
+	}
+}
+
+func TestCaptureUnderSameNameRefreshesInPlace(t *testing.T) {
+	dir := newEnv(t)
+	writeLive(t, dir, credsDoc("A-ACCESS", "A-REFRESH"), configDoc("acct-a", "a@example.invalid"))
+
+	m, _ := Open("")
+	first, err := m.Capture("work")
+	if err != nil {
+		t.Fatal(err)
+	}
+	created := first.CreatedAt
+
+	// Claude Code rotates the token, then the user re-runs `ccm add work`.
+	writeLive(t, dir, credsDoc("A-ACCESS-V2", "A-REFRESH-V2"), configDoc("acct-a", "a@example.invalid"))
+
+	m2, _ := Open("")
+	second, err := m2.Capture("work")
+	if err != nil {
+		t.Fatalf("re-capturing under the same name should refresh, not fail: %v", err)
+	}
+	if n := len(m2.Vault.List()); n != 1 {
+		t.Fatalf("vault holds %d profiles, want 1", n)
+	}
+	if got := gjson.ParseBytes(second.ClaudeAiOauth).Get("refreshToken").String(); got != "A-REFRESH-V2" {
+		t.Errorf("refreshToken = %q, want A-REFRESH-V2", got)
+	}
+	if !second.CreatedAt.Equal(created) {
+		t.Errorf("CreatedAt should be preserved across a refresh, was %v now %v", created, second.CreatedAt)
+	}
+}
+
+// Capturing with no name when the account is already stored must refresh the
+// existing profile rather than mint "a-2", "a-3" and so on.
+func TestCaptureWithoutNameRefreshesExistingProfile(t *testing.T) {
+	dir := newEnv(t)
+	writeLive(t, dir, credsDoc("A-ACCESS", "A-REFRESH"), configDoc("acct-a", "a@example.invalid"))
+
+	m, _ := Open("")
+	if _, err := m.Capture("work"); err != nil {
+		t.Fatal(err)
+	}
+
+	m2, _ := Open("")
+	p, err := m2.Capture("")
+	if err != nil {
+		t.Fatalf("unnamed capture of a known account: %v", err)
+	}
+	if p.Name != "work" {
+		t.Errorf("refreshed profile name = %q, want work", p.Name)
+	}
+	if n := len(m2.Vault.List()); n != 1 {
+		t.Errorf("vault holds %d profiles, want 1", n)
+	}
+}
+
+// The mirror hazard: reusing a name that belongs to a different account would
+// discard that account's only stored refresh token.
+func TestCaptureRefusesToOverwriteADifferentAccount(t *testing.T) {
+	dir := newEnv(t)
+	writeLive(t, dir, credsDoc("A-ACCESS", "A-REFRESH"), configDoc("acct-a", "a@example.invalid"))
+	m, _ := Open("")
+	if _, err := m.Capture("shared"); err != nil {
+		t.Fatal(err)
+	}
+
+	writeLive(t, dir, credsDoc("B-ACCESS", "B-REFRESH"), configDoc("acct-b", "b@example.invalid"))
+	m2, _ := Open("")
+	if _, err := m2.Capture("shared"); err == nil {
+		t.Fatal("expected reusing a name held by another account to be refused")
+	}
+
+	// Account A's tokens must still be intact.
+	m3, _ := Open("")
+	p, err := m3.Vault.Get("shared")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := gjson.ParseBytes(p.ClaudeAiOauth).Get("refreshToken").String(); got != "A-REFRESH" {
+		t.Errorf("account A's token was clobbered: refreshToken = %q, want A-REFRESH", got)
+	}
+}
+
+// Exactly one profile may report as active, which is what the CLI marker, the
+// tray checkbox and the extension status bar all rely on.
+func TestExactlyOneProfileIsActive(t *testing.T) {
+	dir := newEnv(t)
+	writeLive(t, dir, credsDoc("A-ACCESS", "A-REFRESH"), configDoc("acct-a", "a@example.invalid"))
+	m, _ := Open("")
+	if _, err := m.Capture("work"); err != nil {
+		t.Fatal(err)
+	}
+	writeLive(t, dir, credsDoc("B-ACCESS", "B-REFRESH"), configDoc("acct-b", "b@example.invalid"))
+	m2, _ := Open("")
+	if _, err := m2.Capture("personal"); err != nil {
+		t.Fatal(err)
+	}
+
+	m3, _ := Open("")
+	st, err := m3.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	active := 0
+	for _, p := range m3.Vault.List() {
+		if p.AccountUUID == st.AccountUUID {
+			active++
+		}
+	}
+	if active != 1 {
+		t.Errorf("%d profiles match the live account, want exactly 1", active)
+	}
+	if len(m3.Vault.DuplicateAccounts()) != 0 {
+		t.Errorf("vault reports duplicates: %v", m3.Vault.DuplicateAccounts())
+	}
+}
+
 func TestSwitchToUnknownProfileFails(t *testing.T) {
 	dir := newEnv(t)
 	writeLive(t, dir, credsDoc("A-ACCESS", "A-REFRESH"), configDoc("acct-a", "a@example.invalid"))

@@ -349,7 +349,9 @@ func cmdPicker(g globalOpts) error {
 	if err != nil && line == "" {
 		return nil
 	}
-	line = strings.TrimSpace(line)
+	// Windows shells readily prepend a UTF-8 BOM when input is piped rather
+	// than typed, which would otherwise be read as a bogus selection.
+	line = strings.TrimSpace(strings.TrimPrefix(line, "\ufeff"))
 	if line == "" {
 		fmt.Println("Cancelled.")
 		return nil
