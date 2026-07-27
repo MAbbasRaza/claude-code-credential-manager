@@ -4,7 +4,9 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.0] - 2026-07-27
+
+First release. Verified by CI on Windows, macOS and Linux.
 
 ### Added
 
@@ -41,8 +43,11 @@ All notable changes to this project are documented here. The format follows
 - A switch takes effect when Claude Code next starts; credentials are read at startup.
 - Parked accounts still expire when the underlying login reaches its lifetime cap, which no amount
   of capture-on-switch avoids.
-- The macOS Keychain backend compiles and unit-tests on macOS in CI, but the full switch cycle has
-  only been exercised on Windows.
+- The macOS Keychain backend is covered by tests that run against a real Keychain on the CI
+  runner, but a full switch between two real Claude accounts has only been exercised on Windows.
+- The VS Code extension compiles and its `ccm --json` contract is tested, but its UI has not been
+  driven in a real editor window.
+- The tray app's menu behaviour is covered only by unit tests; nobody has clicked it.
 - `ccm-tray` requires cgo and ships only for linux/amd64, darwin/arm64 and windows/amd64.
 
-[Unreleased]: https://github.com/MAbbasRaza/claude-code-credential-manager/commits/main
+[0.1.0]: https://github.com/MAbbasRaza/claude-code-credential-manager/releases/tag/v0.1.0
