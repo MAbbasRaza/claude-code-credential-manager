@@ -144,10 +144,16 @@ Windows. Nothing is written outside those locations and your own Claude Code con
 ```bash
 ccm init                # detect and pin your Claude Code config directory
 ccm add work            # capture the account you are signed into now
-                        # then /logout and /login as your other account
+                        # then /login as your other account
 ccm add personal        # capture that one too
 ccm use work            # switch back, no browser
 ```
+
+**Capture before you sign out.** `/logout` destroys the refresh token, and once it is gone there
+is nothing left for `ccm` to save. Run `ccm add` first, every time.
+
+Full walkthrough, including the tray app, the VS Code extension and troubleshooting:
+[docs/SETUP.md](docs/SETUP.md).
 
 Adding an account requires one ordinary sign-in per account; there is no supported way to mint a
 session offline. After that, switching never touches the network.
