@@ -10,28 +10,28 @@
 class Ccm < Formula
   desc "Switch between Claude Code accounts without signing in again"
   homepage "https://github.com/MAbbasRaza/claude-code-credential-manager"
-  version "0.0.0"
+  version "0.1.0"
   license "MIT"
 
   on_macos do
     on_arm do
       url "https://github.com/MAbbasRaza/claude-code-credential-manager/releases/download/v#{version}/ccm-darwin-arm64"
-      sha256 "0000000000000000000000000000000000000000000000000000000000000000"
+      sha256 "5d98d1be286ad53f1d2cf6702344649ccc40ef337d4f23eab1326e98dcfb2c1f"
     end
     on_intel do
       url "https://github.com/MAbbasRaza/claude-code-credential-manager/releases/download/v#{version}/ccm-darwin-amd64"
-      sha256 "0000000000000000000000000000000000000000000000000000000000000000"
+      sha256 "ce8b1c217affa0edd3fe67b386dbdffce789d2b1b061d4dd366d33246af19be0"
     end
   end
 
   on_linux do
     on_arm do
       url "https://github.com/MAbbasRaza/claude-code-credential-manager/releases/download/v#{version}/ccm-linux-arm64"
-      sha256 "0000000000000000000000000000000000000000000000000000000000000000"
+      sha256 "582cc0a481e83905c23a622ad464d9ed3075a5200fde38b5d97f80e89927174c"
     end
     on_intel do
       url "https://github.com/MAbbasRaza/claude-code-credential-manager/releases/download/v#{version}/ccm-linux-amd64"
-      sha256 "0000000000000000000000000000000000000000000000000000000000000000"
+      sha256 "fbaf349d0129bd2c8c9b867a5e5d1b591dc3f33a5102885e32a501ffd4041be1"
     end
   end
 
