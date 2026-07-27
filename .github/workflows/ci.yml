@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      # systray needs the Ayatana AppIndicator headers to build on Linux.
+      - name: Install Linux tray dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libayatana-appindicator3-dev
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./... -count=1
+
+      # The race detector needs cgo and a C toolchain. Running it on Linux
+      # keeps the requirement to one runner rather than all three.
+      - name: Test with race detector
+        if: runner.os == 'Linux'
+        run: go test ./... -count=1 -race
+        env:
+          CGO_ENABLED: '1'
+
+      - name: Build CLI
+        run: go build ./cmd/ccm
+
+      # The tray uses cgo on macOS and Linux, so it is built on each native
+      # runner rather than cross-compiled.
+      - name: Build tray
+        run: go build ./cmd/ccm-tray
+
+  extension:
+    name: extension
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
+      - run: npm ci
+        working-directory: extension
+      - run: npm run compile
+        working-directory: extension
+
+  release:
+    name: release artifacts
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [test, extension]
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+          - os: ubuntu-latest
+            goos: linux
+            goarch: arm64
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+          - os: macos-latest
+            goos: darwin
+            goarch: amd64
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Build CLI
+        shell: bash
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          out="ccm-${GOOS}-${GOARCH}"
+          if [ "$GOOS" = "windows" ]; then out="${out}.exe"; fi
+          go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" -o "dist/${out}" ./cmd/ccm
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: ccm-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/

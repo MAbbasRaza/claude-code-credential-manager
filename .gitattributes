@@ -1,0 +1,14 @@
+# Normalize line endings so the repo is identical across Windows, macOS and
+# Linux checkouts. Without this, Go source committed from Windows arrives with
+# CRLF and gofmt disagrees with CI.
+* text=auto eol=lf
+
+*.go      text eol=lf
+*.ts      text eol=lf
+*.json    text eol=lf
+*.yml     text eol=lf
+*.md      text eol=lf
+
+*.png     binary
+*.ico     binary
+*.exe     binary

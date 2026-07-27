@@ -1,0 +1,19 @@
+# Build output
+/bin/
+/dist/
+*.exe
+
+# Extension build output
+extension/node_modules/
+extension/out/
+extension/*.vsix
+
+# Local scratch
+*.local
+.DS_Store
+Thumbs.db
+
+# Never commit real credential material or a vault, even accidentally.
+vault.json
+.credentials.json
+.claude.json

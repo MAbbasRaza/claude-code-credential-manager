@@ -1,0 +1,75 @@
+{
+  "name": "claude-code-credential-manager",
+  "displayName": "Claude Code Credential Manager",
+  "description": "Switch between Claude Code accounts from VS Code without signing in again.",
+  "version": "0.1.0",
+  "publisher": "MAbbasRaza",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MAbbasRaza/claude-code-credential-manager.git"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "keywords": ["claude", "claude code", "account", "credentials", "switch"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "ccm.switchAccount",
+        "title": "Claude: Switch Account",
+        "category": "Claude Code Credential Manager"
+      },
+      {
+        "command": "ccm.captureAccount",
+        "title": "Claude: Capture Current Login as Profile",
+        "category": "Claude Code Credential Manager"
+      },
+      {
+        "command": "ccm.doctor",
+        "title": "Claude: Diagnose Credential Manager",
+        "category": "Claude Code Credential Manager"
+      }
+    ],
+    "configuration": {
+      "title": "Claude Code Credential Manager",
+      "properties": {
+        "ccm.binaryPath": {
+          "type": "string",
+          "default": "ccm",
+          "description": "Path to the ccm executable. Leave as 'ccm' if it is on your PATH."
+        },
+        "ccm.claudeConfigDir": {
+          "type": "string",
+          "default": "",
+          "description": "Override the Claude Code config directory for this window. Leave empty to use the directory pinned by 'ccm init', which is the recommended setup."
+        },
+        "ccm.showStatusBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the active Claude Code account in the status bar."
+        },
+        "ccm.refreshIntervalSeconds": {
+          "type": "number",
+          "default": 60,
+          "minimum": 0,
+          "description": "How often to refresh the status bar. Set to 0 to refresh only on demand."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "tsc --noEmit -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.7.0"
+  }
+}
