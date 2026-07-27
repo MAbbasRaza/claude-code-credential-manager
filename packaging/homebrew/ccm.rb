@@ -10,28 +10,28 @@
 class Ccm < Formula
   desc "Switch between Claude Code accounts without signing in again"
   homepage "https://github.com/MAbbasRaza/claude-code-credential-manager"
-  version "0.1.0"
+  version "0.1.1"
   license "MIT"
 
   on_macos do
     on_arm do
       url "https://github.com/MAbbasRaza/claude-code-credential-manager/releases/download/v#{version}/ccm-darwin-arm64"
-      sha256 "5d98d1be286ad53f1d2cf6702344649ccc40ef337d4f23eab1326e98dcfb2c1f"
+      sha256 "b37c403992d9f3e2c313870ec65a3b0b12c24c92fa776b5be1cb2c739a42938a"
     end
     on_intel do
       url "https://github.com/MAbbasRaza/claude-code-credential-manager/releases/download/v#{version}/ccm-darwin-amd64"
-      sha256 "ce8b1c217affa0edd3fe67b386dbdffce789d2b1b061d4dd366d33246af19be0"
+      sha256 "7cba1b2039e06eaef11ba0c60fa60fcb04f3e34cdcbb4104d2c85a5ac9f3c4b7"
     end
   end
 
   on_linux do
     on_arm do
       url "https://github.com/MAbbasRaza/claude-code-credential-manager/releases/download/v#{version}/ccm-linux-arm64"
-      sha256 "582cc0a481e83905c23a622ad464d9ed3075a5200fde38b5d97f80e89927174c"
+      sha256 "9af2f10b35a9a389665fa81846b2d6512348838029e2713c4d85a2e23f229d3c"
     end
     on_intel do
       url "https://github.com/MAbbasRaza/claude-code-credential-manager/releases/download/v#{version}/ccm-linux-amd64"
-      sha256 "fbaf349d0129bd2c8c9b867a5e5d1b591dc3f33a5102885e32a501ffd4041be1"
+      sha256 "513779f09f2d3ca2b62b3bd6582fbb6caaa0dc751f8a8e4b8b7389181c05a4b7"
     end
   end
 
