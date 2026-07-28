@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -94,6 +95,15 @@ func rebuild() {
 	}
 
 	systray.AddSeparator()
+
+	// A tray menu cannot take text input, so renaming and the rest of the
+	// management surface live in the desktop app. Offer it only when it is
+	// actually installed, rather than showing an entry that fails on click.
+	if guiPath() != "" {
+		manage := systray.AddMenuItem("Manage accounts…", "Open the desktop app")
+		go onClick(manage.ClickedCh, openGUI)
+	}
+
 	refresh := systray.AddMenuItem("Refresh", "Re-read profiles and active account")
 	go onClick(refresh.ClickedCh, rebuild)
 
@@ -146,6 +156,38 @@ func capturePrompt() {
 	}
 	notify("Captured "+p.Name, p.EmailAddress)
 	rebuild()
+}
+
+// guiPath locates the desktop app beside this executable, returning empty when
+// it is not installed. Looking next to ourselves rather than on PATH keeps a
+// portable, unzipped-anywhere install working.
+func guiPath() string {
+	name := "ccm-gui"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+
+	if self, err := os.Executable(); err == nil {
+		candidate := filepath.Join(filepath.Dir(self), name)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	if p, err := exec.LookPath(name); err == nil {
+		return p
+	}
+	return ""
+}
+
+func openGUI() {
+	path := guiPath()
+	if path == "" {
+		notify("ccm", "The desktop app is not installed alongside ccm-tray.")
+		return
+	}
+	if err := exec.Command(path).Start(); err != nil {
+		notify("ccm could not open the manager", firstLine(err.Error()))
+	}
 }
 
 func addDisabled(label string) {

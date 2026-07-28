@@ -4,6 +4,28 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-07-28
+
+### Added
+
+- `ccm-gui`, a desktop application. One window for everything: the saved accounts with the active
+  one marked, and switch, capture, rename, remove, diagnostics and settings. It is the only
+  surface where every operation is available, since a tray menu cannot take text input and the
+  VS Code extension only helps inside VS Code.
+- The tray gains a **Manage accounts…** entry that opens it, shown only when it is installed.
+- `install.ps1 -Gui` and `CCM_GUI=1` for the shell installer.
+
+### Notes
+
+The desktop app renders through the platform's own browser engine: WebView2 on Windows,
+WKWebView on macOS, WebKitGTK on Linux. The first implementation used Fyne, which draws through
+OpenGL, and it crashed at window creation on the development machine. A ten-line Fyne program
+crashed identically, so the fault was the toolkit against that graphics setup rather than this
+code, and shipping a GUI that cannot start is worse than shipping none. The replacement also
+turned out to be a tenth of the size: 6.6 MB against 42.4 MB.
+
+[0.2.0]: https://github.com/MAbbasRaza/claude-code-credential-manager/releases/tag/v0.2.0
+
 ## [0.1.2] - 2026-07-28
 
 ### Added

@@ -35,7 +35,14 @@ out of every MCP connector, or destroy a refresh token and force a browser re-au
 |---|---|
 | CLI (`cmd/ccm`) | Go 1.25+. Pure Go, cross-compiles anywhere. |
 | Tray (`cmd/ccm-tray`) | Go 1.25+, plus cgo on macOS and Linux. On Linux: `libayatana-appindicator3-dev`. |
+| Desktop app (`cmd/ccm-gui`) | Go 1.25+ and cgo on every platform. On Linux: `libgtk-3-dev`, `libwebkit2gtk-4.1-dev`. |
 | Extension (`extension/`) | Node 22+. |
+
+The desktop app renders through the platform's own browser engine rather than a drawn toolkit.
+That choice was forced: the first version used Fyne, which needs OpenGL, and it crashed at window
+creation on the author's machine. A ten-line Fyne program crashed identically, so the fault was
+the toolkit against that graphics setup, not the code. If you change this, keep the constraint in
+mind: the app has to start on machines with unusual or partly broken graphics drivers.
 
 ## Build and test
 

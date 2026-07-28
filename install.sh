@@ -8,6 +8,7 @@
 #   CCM_VERSION      tag to install (default: latest)
 #   CCM_INSTALL_DIR  where to put the binary (default: ~/.local/bin)
 #   CCM_TRAY         set to 1 to also install the tray app, where available
+#   CCM_GUI          set to 1 to also install the desktop app, where available
 #   CCM_NO_VERIFY    set to 1 to skip checksum verification (not recommended)
 #
 # POSIX sh on purpose: this has to run under dash, busybox ash and bash alike.
@@ -20,6 +21,7 @@ REPO="MAbbasRaza/claude-code-credential-manager"
 VERSION="${CCM_VERSION:-latest}"
 INSTALL_DIR="${CCM_INSTALL_DIR:-$HOME/.local/bin}"
 INSTALL_TRAY="${CCM_TRAY:-0}"
+INSTALL_GUI="${CCM_GUI:-0}"
 NO_VERIFY="${CCM_NO_VERIFY:-0}"
 
 # Colour only when stderr is a terminal, so piped logs stay clean.
@@ -214,6 +216,10 @@ To install without verification anyway: CCM_NO_VERIFY=1 (not recommended)"
 
     if [ "$INSTALL_TRAY" = "1" ]; then
         install_asset "ccm-tray-$OS-$ARCH" ccm-tray
+    fi
+
+    if [ "$INSTALL_GUI" = "1" ]; then
+        install_asset "ccm-gui-$OS-$ARCH" ccm-gui
     fi
 
     installed_version=$("$INSTALL_DIR/ccm" --version 2>/dev/null || echo "unknown")

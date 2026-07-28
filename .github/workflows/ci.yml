@@ -58,12 +58,22 @@ jobs:
           go-version: '1.25'
           cache: true
 
-      # systray binds Ayatana AppIndicator on Linux.
-      - name: Install Linux tray dependencies
+      # systray binds Ayatana AppIndicator; webview binds GTK and WebKitGTK.
+      #
+      # webview declares webkit2gtk-4.0, but Ubuntu 24.04 ships only 4.1, which
+      # is API-compatible for this use. Aliasing the pkg-config files lets the
+      # build find it without pinning an older, soon-to-be-retired runner image.
+      - name: Install Linux GUI dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libayatana-appindicator3-dev
+          sudo apt-get install -y libayatana-appindicator3-dev libgtk-3-dev libwebkit2gtk-4.1-dev
+          pc=/usr/lib/x86_64-linux-gnu/pkgconfig
+          for lib in webkit2gtk javascriptcoregtk; do
+            if [ ! -f "$pc/${lib}-4.0.pc" ] && [ -f "$pc/${lib}-4.1.pc" ]; then
+              sudo ln -s "$pc/${lib}-4.1.pc" "$pc/${lib}-4.0.pc"
+            fi
+          done
 
       - name: Test
         run: go test ./... -count=1
@@ -79,10 +89,13 @@ jobs:
       - name: Build CLI
         run: go build ./cmd/ccm
 
-      # The tray uses cgo on macOS and Linux, so it is built on each native
+      # The tray and the desktop app use cgo, so both are built on each native
       # runner rather than cross-compiled.
       - name: Build tray
         run: go build ./cmd/ccm-tray
+
+      - name: Build desktop app
+        run: go build ./cmd/ccm-gui
 
   extension:
     name: extension
@@ -222,10 +235,66 @@ jobs:
           path: dist/
           if-no-files-found: error
 
+  release-gui:
+    name: build desktop app ${{ matrix.goos }}/${{ matrix.goarch }}
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [check, test, extension]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, goos: linux, goarch: amd64 }
+          - { os: macos-latest, goos: darwin, goarch: arm64 }
+          - { os: windows-latest, goos: windows, goarch: amd64 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Install Linux GUI dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+          pc=/usr/lib/x86_64-linux-gnu/pkgconfig
+          for lib in webkit2gtk javascriptcoregtk; do
+            if [ ! -f "$pc/${lib}-4.0.pc" ] && [ -f "$pc/${lib}-4.1.pc" ]; then
+              sudo ln -s "$pc/${lib}-4.1.pc" "$pc/${lib}-4.0.pc"
+            fi
+          done
+
+      # webview binds the platform's own browser engine through cgo, so like
+      # the tray this is built natively per target and never cross-compiled.
+      # -H=windowsgui suppresses the console window that would otherwise open
+      # behind the app on Windows.
+      - name: Build
+        shell: bash
+        env:
+          CGO_ENABLED: '1'
+        run: |
+          version="${GITHUB_REF_NAME}"
+          name="ccm-gui-${{ matrix.goos }}-${{ matrix.goarch }}"
+          ldflags="-s -w -X main.version=${version}"
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            name="${name}.exe"
+            ldflags="${ldflags} -H=windowsgui"
+          fi
+          mkdir -p dist
+          go build -trimpath -ldflags "${ldflags}" -o "dist/${name}" ./cmd/ccm-gui
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gui-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/
+          if-no-files-found: error
+
   publish:
     name: publish release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [release-cli, release-tray]
+    needs: [release-cli, release-tray, release-gui]
     runs-on: ubuntu-latest
     permissions:
       contents: write

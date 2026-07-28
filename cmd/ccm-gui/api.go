@@ -1,0 +1,289 @@
+package main
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/webview/webview_go"
+
+	"github.com/MAbbasRaza/claude-code-credential-manager/internal/config"
+	"github.com/MAbbasRaza/claude-code-credential-manager/internal/manager"
+	"github.com/MAbbasRaza/claude-code-credential-manager/internal/proc"
+)
+
+// api is everything the page can call.
+//
+// A manager is opened per call rather than held. The CLI, the tray and the
+// VS Code extension may all have changed the vault since the last look, and a
+// cached handle would render state that is no longer true.
+type api struct {
+	win webview.WebView
+}
+
+// Profile is one saved account as the page renders it.
+type Profile struct {
+	Name         string `json:"name"`
+	Email        string `json:"email"`
+	Organization string `json:"organization"`
+	Plan         string `json:"plan"`
+	Active       bool   `json:"active"`
+	Expiry       string `json:"expiry"`
+	Expired      bool   `json:"expired"`
+	LastUsed     string `json:"lastUsed"`
+}
+
+// Overview is the whole window state in one round trip, so the page never
+// renders a half-updated view assembled from several calls.
+type Overview struct {
+	Profiles []Profile `json:"profiles"`
+	Version  string    `json:"version"`
+
+	LoggedIn     bool   `json:"loggedIn"`
+	Email        string `json:"email"`
+	Organization string `json:"organization"`
+	Plan         string `json:"plan"`
+	ActiveName   string `json:"activeName"`
+
+	ConfigDir   string `json:"configDir"`
+	VaultPath   string `json:"vaultPath"`
+	RunningCode int    `json:"runningCode"`
+}
+
+func (a *api) List() (Overview, error) {
+	m, err := manager.Open("")
+	if err != nil {
+		return Overview{}, err
+	}
+	st, err := m.Status()
+	if err != nil {
+		return Overview{}, err
+	}
+
+	out := Overview{
+		Version:      version,
+		LoggedIn:     st.LoggedIn,
+		Email:        st.EmailAddress,
+		Organization: st.Organization,
+		Plan:         st.Subscription,
+		ActiveName:   st.ActiveProfile,
+		ConfigDir:    st.ConfigDir,
+		VaultPath:    m.Vault.Path,
+		Profiles:     []Profile{},
+	}
+	if procs, err := proc.FindClaude(); err == nil {
+		out.RunningCode = len(procs)
+	}
+
+	for _, p := range m.Vault.List() {
+		e := Profile{
+			Name:         p.Name,
+			Email:        p.EmailAddress,
+			Organization: p.OrganizationName,
+			Plan:         p.SubscriptionType(),
+			Active:       p.AccountUUID != "" && p.AccountUUID == st.AccountUUID,
+		}
+		if exp := p.ExpiresAt(); !exp.IsZero() {
+			e.Expiry = exp.Local().Format("2 Jan 2006, 15:04")
+			e.Expired = time.Now().After(exp)
+		}
+		if !p.LastUsedAt.IsZero() {
+			e.LastUsed = p.LastUsedAt.Local().Format("2 Jan 2006, 15:04")
+		}
+		out.Profiles = append(out.Profiles, e)
+	}
+	return out, nil
+}
+
+// SwitchResult tells the page what happened, including the guard case so it can
+// offer to override rather than just reporting a failure.
+type SwitchResult struct {
+	Switched   bool   `json:"switched"`
+	To         string `json:"to"`
+	ToEmail    string `json:"toEmail"`
+	CapturedAs string `json:"capturedAs"`
+	NewProfile bool   `json:"newProfile"`
+
+	Blocked      bool   `json:"blocked"`
+	BlockedCount int    `json:"blockedCount"`
+	Message      string `json:"message"`
+}
+
+func (a *api) Switch(name string, force bool) (SwitchResult, error) {
+	m, err := manager.Open("")
+	if err != nil {
+		return SwitchResult{}, err
+	}
+
+	res, err := m.Switch(name, force)
+	if err != nil {
+		// The running-Claude-Code refusal is not a failure to report and
+		// forget; it is a decision to put back to the user, so it comes back
+		// as data rather than an error.
+		if strings.Contains(err.Error(), "Claude Code is running") {
+			count := 0
+			if procs, e := proc.FindClaude(); e == nil {
+				count = len(procs)
+			}
+			return SwitchResult{Blocked: true, BlockedCount: count, To: name, Message: err.Error()}, nil
+		}
+		return SwitchResult{}, err
+	}
+
+	return SwitchResult{
+		Switched:   true,
+		To:         res.To,
+		ToEmail:    res.ToEmail,
+		CapturedAs: res.CapturedAs,
+		NewProfile: res.CapturedNew,
+	}, nil
+}
+
+func (a *api) Capture(name string) (Profile, error) {
+	m, err := manager.Open("")
+	if err != nil {
+		return Profile{}, err
+	}
+	p, err := m.Capture(strings.TrimSpace(name))
+	if err != nil {
+		return Profile{}, err
+	}
+	return Profile{Name: p.Name, Email: p.EmailAddress, Organization: p.OrganizationName}, nil
+}
+
+func (a *api) Rename(oldName, newName string) error {
+	m, err := manager.Open("")
+	if err != nil {
+		return err
+	}
+	return m.Rename(oldName, strings.TrimSpace(newName))
+}
+
+func (a *api) Remove(name string) error {
+	m, err := manager.Open("")
+	if err != nil {
+		return err
+	}
+	return m.Remove(name)
+}
+
+// Doctor returns a plain-text report. It is deliberately free of token
+// material so it can be pasted into a bug report unedited.
+func (a *api) Doctor() (string, error) {
+	m, err := manager.Open("")
+	if err != nil {
+		return "", err
+	}
+	st, err := m.Status()
+	if err != nil {
+		return "", err
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "ccm %s\n\n", version)
+	fmt.Fprintf(&b, "Config directory   %s\n", st.ConfigDir)
+	fmt.Fprintf(&b, "  resolved from    %s\n", st.ConfigDirSource)
+	fmt.Fprintf(&b, "Credentials        %s\n", m.Store.Describe())
+	fmt.Fprintf(&b, "Account map        %s\n", st.ConfigJSONPath)
+	fmt.Fprintf(&b, "Vault              %s\n", m.Vault.Path)
+	fmt.Fprintf(&b, "  protection       %s\n", m.Vault.SealerName())
+	fmt.Fprintf(&b, "  profiles         %d\n\n", len(m.Vault.List()))
+
+	if st.LoggedIn {
+		fmt.Fprintf(&b, "Active account     %s\n", orText(st.EmailAddress, "unknown"))
+		if st.Organization != "" {
+			fmt.Fprintf(&b, "  organization     %s\n", st.Organization)
+		}
+		if st.Subscription != "" {
+			fmt.Fprintf(&b, "  plan             %s\n", st.Subscription)
+		}
+		if st.ExpiresAt != "" {
+			fmt.Fprintf(&b, "  token expiry     %s\n", st.ExpiresAt)
+		}
+	} else {
+		b.WriteString("Active account     not signed in\n")
+	}
+
+	var warnings []string
+	for _, names := range m.Vault.DuplicateAccounts() {
+		warnings = append(warnings, "Duplicate profiles for one account: "+strings.Join(names, ", "))
+	}
+	if procs, err := proc.FindClaude(); err == nil && len(procs) > 0 {
+		warnings = append(warnings, fmt.Sprintf(
+			"Claude Code is running (%d process(es)); switching now would be undone when it exits.", len(procs)))
+	}
+	if st.LoggedIn && st.ActiveProfile == "" {
+		warnings = append(warnings, "The active account is not saved yet. Use Capture current login.")
+	}
+
+	if len(warnings) > 0 {
+		b.WriteString("\nWarnings\n")
+		for _, w := range warnings {
+			fmt.Fprintf(&b, "  - %s\n", w)
+		}
+	} else {
+		b.WriteString("\nNo warnings.\n")
+	}
+	return b.String(), nil
+}
+
+// Settings mirrors the settings file for the page.
+type Settings struct {
+	ClaudeConfigDir       string `json:"claudeConfigDir"`
+	CredentialsBackend    string `json:"credentialsBackend"`
+	RequireClosedSessions bool   `json:"requireClosedSessions"`
+	SettingsPath          string `json:"settingsPath"`
+}
+
+func (a *api) SettingsGet() (Settings, error) {
+	s, err := config.LoadSettings()
+	if err != nil {
+		return Settings{}, err
+	}
+	backend := s.CredentialsBackend
+	if backend == "" {
+		backend = "auto"
+	}
+	return Settings{
+		ClaudeConfigDir:       s.ClaudeConfigDir,
+		CredentialsBackend:    backend,
+		RequireClosedSessions: s.ShouldRequireClosedSessions(),
+		SettingsPath:          s.Path(),
+	}, nil
+}
+
+func (a *api) SettingsSet(dir, backend string, requireClosed bool) error {
+	s, err := config.LoadSettings()
+	if err != nil {
+		return err
+	}
+
+	dir = strings.TrimSpace(dir)
+	if dir != "" {
+		// Refuse a directory Claude Code does not use. Accepting one would
+		// produce switches that appear to succeed and change nothing.
+		if err := config.ValidateClaudeDir(dir); err != nil {
+			return err
+		}
+	}
+	s.ClaudeConfigDir = dir
+
+	if _, err := config.ParseBackendPref(backend); err != nil {
+		return err
+	}
+	if backend == "auto" {
+		s.CredentialsBackend = ""
+	} else {
+		s.CredentialsBackend = backend
+	}
+
+	s.RequireClosedSessions = &requireClosed
+	return s.Save()
+}
+
+func orText(s, fallback string) string {
+	if strings.TrimSpace(s) == "" {
+		return fallback
+	}
+	return s
+}

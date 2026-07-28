@@ -23,7 +23,15 @@ Switched to "personal" (me@example.com).
 Restart Claude Code for the new account to take effect.
 ```
 
-Ships as a CLI, a system tray app, and a VS Code extension, all over one shared core.
+Ships as a CLI, a desktop app, a system tray app, and a VS Code extension, all over one shared
+core.
+
+| Surface | Use it when |
+|---|---|
+| `ccm` CLI | Terminal-first, scriptable, `--json` for automation |
+| `ccm-gui` desktop app | A window: list, switch, capture, rename, remove, diagnostics, settings |
+| `ccm-tray` | One-click switching from the system tray |
+| VS Code extension | Status bar account, switch and manage without leaving the editor |
 
 ---
 
@@ -81,8 +89,17 @@ irm https://raw.githubusercontent.com/MAbbasRaza/claude-code-credential-manager/
 
 Both installers detect your architecture, verify the download against the published
 `SHA256SUMS`, install into your home directory, and tell you how to fix your `PATH` if needed.
-Neither ever asks for `sudo` or administrator rights. Set `CCM_TRAY=1` (or pass `-Tray` on
-Windows) to install the tray app as well.
+Neither ever asks for `sudo` or administrator rights.
+
+To install the extra surfaces alongside the CLI:
+
+```bash
+CCM_GUI=1 CCM_TRAY=1 curl -fsSL .../install.sh | sh     # macOS, Linux
+```
+
+```powershell
+.\install.ps1 -Gui -Tray                                # Windows
+```
 
 <details>
 <summary>Other ways to install</summary>

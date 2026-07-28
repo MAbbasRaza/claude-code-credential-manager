@@ -130,6 +130,37 @@ stored copy of its refresh token and leave a browser sign-in as the only way bac
 
 ---
 
+## Optional: the desktop app
+
+If you would rather not use the terminal at all, install the desktop app:
+
+```powershell
+# Windows, alongside the CLI
+.\install.ps1 -Gui
+```
+
+```bash
+# macOS, Linux
+CCM_GUI=1 curl -fsSL https://raw.githubusercontent.com/MAbbasRaza/claude-code-credential-manager/main/install.sh | sh
+```
+
+Run `ccm-gui`. It gives you one window with everything: the list of saved accounts with the
+active one marked, and buttons to switch, capture the current login, rename, remove, view
+diagnostics, and change settings.
+
+It is the only surface where every operation is available. A tray menu cannot take text input, so
+renaming is impossible there, and the VS Code extension only helps if you work in VS Code.
+
+It draws through the browser engine your system already has: WebView2 on Windows, WKWebView on
+macOS, WebKitGTK on Linux. Nothing to install, and no OpenGL, which matters on machines where a
+GPU-drawn toolkit fails to start.
+
+Like the tray, it needs cgo, so prebuilt binaries ship for linux/amd64, darwin/arm64 and
+windows/amd64. Building from source on Linux additionally needs `libgtk-3-dev` and
+`libwebkit2gtk-4.1-dev`.
+
+---
+
 ## Optional: the tray app
 
 Run `ccm-tray`. It puts an icon in your system tray with one entry per account; click one to

@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Claude Code Accounts</title>
+<style>
+  /* Palette taken from the project icon: a dark tile, terracotta accent,
+     cream card faces. Everything is inline; the page must not reach the
+     network, and a credential manager has no business loading remote assets. */
+  :root {
+    --bg:        #161715;
+    --surface:   #1f211e;
+    --surface-2: #282b27;
+    --line:      #34382f;
+    --text:      #ece7dd;
+    --muted:     #9a9589;
+    --accent:    #e17757;
+    --accent-dim:#8a4632;
+    --danger:    #d9564b;
+    --ok:        #7fa66a;
+    --warn:      #d8a657;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+    user-select: none;
+    overflow: hidden;
+  }
+  button { font: inherit; cursor: pointer; border-radius: 7px; border: 1px solid transparent; }
+  button:disabled { opacity: .4; cursor: default; }
+  input, select {
+    font: inherit; color: var(--text); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; width: 100%;
+    user-select: text;
+  }
+  input:focus, select:focus { outline: 2px solid var(--accent-dim); outline-offset: 1px; }
+
+  /* ---------- header ---------- */
+  header { padding: 18px 22px 14px; border-bottom: 1px solid var(--line); background: var(--surface); }
+  .who { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .who h1 { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: .2px; }
+  .who .sub { color: var(--muted); font-size: 13px; }
+  .pill {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .6px;
+    padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted);
+  }
+  .pill.plan { color: var(--accent); border-color: var(--accent-dim); }
+
+  .banner {
+    margin-top: 12px; padding: 9px 12px; border-radius: 8px; font-size: 13px;
+    background: rgba(216,166,87,.12); border: 1px solid rgba(216,166,87,.35); color: var(--warn);
+    display: none;
+  }
+  .banner.show { display: block; }
+
+  /* ---------- list ---------- */
+  main { flex: 1; overflow-y: auto; padding: 14px 22px; }
+  .empty { color: var(--muted); text-align: center; padding: 56px 20px; }
+  .empty strong { display: block; color: var(--text); font-size: 15px; margin-bottom: 6px; }
+
+  .card {
+    display: flex; align-items: center; gap: 14px;
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 9px;
+  }
+  .card.active { border-color: var(--accent-dim); background: var(--surface-2); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line); flex: 0 0 auto; }
+  .card.active .dot { background: var(--accent); box-shadow: 0 0 0 3px rgba(225,119,87,.18); }
+
+  .info { flex: 1; min-width: 0; }
+  .name { font-weight: 600; }
+  .name .tag {
+    font-size: 10px; text-transform: uppercase; letter-spacing: .6px;
+    color: var(--accent); margin-left: 8px; font-weight: 500;
+  }
+  .meta { color: var(--muted); font-size: 12.5px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .meta .warn { color: var(--warn); }
+
+  .rowbtns { display: flex; gap: 7px; flex: 0 0 auto; }
+  .btn { padding: 6px 12px; background: transparent; border-color: var(--line); color: var(--text); }
+  .btn:hover:not(:disabled) { background: var(--surface-2); border-color: var(--muted); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #201410; font-weight: 600; }
+  .btn.primary:hover:not(:disabled) { filter: brightness(1.08); }
+  .btn.danger:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); }
+
+  /* ---------- footer ---------- */
+  footer {
+    border-top: 1px solid var(--line); background: var(--surface);
+    padding: 10px 22px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  }
+  footer .spacer { flex: 1; }
+  footer .paths { color: var(--muted); font-size: 11.5px; font-family: ui-monospace, Consolas, monospace; }
+
+  /* ---------- modal ---------- */
+  .scrim {
+    position: fixed; inset: 0; background: rgba(0,0,0,.62);
+    display: none; align-items: center; justify-content: center; padding: 24px;
+  }
+  .scrim.show { display: flex; }
+  .modal {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+    width: min(620px, 100%); max-height: 100%; display: flex; flex-direction: column;
+    box-shadow: 0 18px 50px rgba(0,0,0,.5);
+  }
+  .modal h2 { margin: 0; padding: 16px 20px 12px; font-size: 16px; font-weight: 600; }
+  .modal .body { padding: 0 20px 16px; overflow-y: auto; }
+  .modal .body p { margin: 0 0 12px; color: var(--muted); }
+  .modal .body label { display: block; margin: 12px 0 6px; font-size: 12.5px; color: var(--muted); }
+  .modal .foot { display: flex; justify-content: flex-end; gap: 9px; padding: 12px 20px 16px; }
+  .modal pre {
+    margin: 0; padding: 12px; background: var(--bg); border: 1px solid var(--line);
+    border-radius: 8px; font-family: ui-monospace, Consolas, monospace; font-size: 12px;
+    white-space: pre-wrap; user-select: text; color: var(--text);
+  }
+  .err { color: var(--danger); font-size: 12.5px; margin-top: 8px; min-height: 1em; white-space: pre-wrap; }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
+
+  .toast {
+    position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%) translateY(20px);
+    background: var(--surface-2); border: 1px solid var(--line); color: var(--text);
+    padding: 10px 16px; border-radius: 9px; font-size: 13px; opacity: 0;
+    transition: opacity .18s, transform .18s; pointer-events: none; max-width: 80%;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.bad { border-color: var(--danger); color: var(--danger); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="who">
+    <h1 id="who-title">Loading…</h1>
+    <span class="pill plan" id="who-plan" hidden></span>
+    <span class="pill" id="who-org" hidden></span>
+  </div>
+  <div class="sub" id="who-sub"></div>
+  <div class="banner" id="banner"></div>
+</header>
+
+<main>
+  <div id="list"></div>
+</main>
+
+<footer>
+  <button class="btn primary" id="btn-capture">Capture current login</button>
+  <button class="btn" id="btn-refresh">Refresh</button>
+  <button class="btn" id="btn-doctor">Diagnostics</button>
+  <button class="btn" id="btn-settings">Settings</button>
+  <span class="spacer"></span>
+  <span class="paths" id="paths"></span>
+</footer>
+
+<div class="scrim" id="scrim"><div class="modal" id="modal"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+const $ = (id) => document.getElementById(id);
+let state = null;
+
+/* ---------------- helpers ---------------- */
+
+function toast(msg, bad) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.className = "toast show" + (bad ? " bad" : "");
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.className = "toast"; }, 4200);
+}
+
+// Bound Go functions reject with an Error whose message is the Go error.
+function errText(e) {
+  if (!e) return "unknown error";
+  return (e.message || String(e)).replace(/^Error:\s*/, "");
+}
+
+function closeModal() { $("scrim").classList.remove("show"); $("modal").innerHTML = ""; }
+
+function showModal(title, bodyHTML, buttons) {
+  const m = $("modal");
+  m.innerHTML =
+    '<h2></h2><div class="body">' + bodyHTML + '<div class="err" id="modal-err"></div></div>' +
+    '<div class="foot" id="modal-foot"></div>';
+  m.querySelector("h2").textContent = title;
+
+  const foot = $("modal-foot");
+  buttons.forEach((b) => {
+    const el = document.createElement("button");
+    el.className = "btn" + (b.kind ? " " + b.kind : "");
+    el.textContent = b.label;
+    el.onclick = b.onClick;
+    foot.appendChild(el);
+  });
+  $("scrim").classList.add("show");
+  const first = m.querySelector("input, select");
+  if (first) { first.focus(); first.select && first.select(); }
+}
+
+function modalError(msg) { const e = $("modal-err"); if (e) e.textContent = msg; }
+
+// Escapes text destined for innerHTML. Account emails and organisation names
+// come from Claude Code's config, not from us, so they are untrusted input.
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+  ));
+}
+
+/* ---------------- rendering ---------------- */
+
+async function refresh() {
+  try {
+    state = await window.goList();
+  } catch (e) {
+    $("who-title").textContent = "Cannot read configuration";
+    $("who-sub").textContent = errText(e);
+    return;
+  }
+
+  if (state.loggedIn) {
+    $("who-title").textContent = state.email || "Signed in";
+    setPill("who-plan", state.plan);
+    setPill("who-org", state.organization);
+    $("who-sub").textContent = state.activeName
+      ? "Saved as “" + state.activeName + "”"
+      : "This account is not saved yet — use Capture current login";
+  } else {
+    $("who-title").textContent = "Not signed in";
+    setPill("who-plan", "");
+    setPill("who-org", "");
+    $("who-sub").textContent = "Run /login in Claude Code, then capture the account.";
+  }
+
+  const banner = $("banner");
+  if (state.runningCode > 0) {
+    banner.textContent = "Claude Code is running (" + state.runningCode + " process" +
+      (state.runningCode === 1 ? "" : "es") + "). Switching is blocked because a live session " +
+      "rewrites its configuration when it exits, which would undo the switch.";
+    banner.classList.add("show");
+  } else {
+    banner.classList.remove("show");
+  }
+
+  $("paths").textContent = state.configDir;
+  renderList();
+}
+
+function setPill(id, text) {
+  const el = $(id);
+  if (text) { el.textContent = text; el.hidden = false; } else { el.hidden = true; }
+}
+
+function renderList() {
+  const list = $("list");
+  if (!state.profiles || state.profiles.length === 0) {
+    list.innerHTML =
+      '<div class="empty"><strong>No accounts saved yet</strong>' +
+      "Sign in to Claude Code, then choose Capture current login.<br>" +
+      "Capture before you sign out — /logout destroys the refresh token.</div>";
+    return;
+  }
+
+  list.innerHTML = "";
+  state.profiles.forEach((p) => {
+    const meta = [];
+    if (p.organization) meta.push(esc(p.organization));
+    if (p.plan) meta.push(esc(p.plan));
+    if (p.expired) meta.push('<span class="warn">token expired</span>');
+    else if (p.expiry) meta.push("expires " + esc(p.expiry));
+
+    const card = document.createElement("div");
+    card.className = "card" + (p.active ? " active" : "");
+    card.innerHTML =
+      '<span class="dot"></span>' +
+      '<div class="info">' +
+        '<div class="name">' + esc(p.name) +
+          (p.active ? '<span class="tag">active</span>' : "") + "</div>" +
+        '<div class="meta">' + esc(p.email) + (meta.length ? " &middot; " + meta.join(" &middot; ") : "") + "</div>" +
+      "</div>" +
+      '<div class="rowbtns">' +
+        '<button class="btn primary" data-act="switch"' + (p.active ? " disabled" : "") + ">Switch</button>" +
+        '<button class="btn" data-act="rename">Rename</button>' +
+        '<button class="btn danger" data-act="remove">Remove</button>' +
+      "</div>";
+
+    card.querySelectorAll("button").forEach((b) => {
+      b.onclick = () => {
+        const act = b.getAttribute("data-act");
+        if (act === "switch") doSwitch(p.name, false);
+        if (act === "rename") askRename(p.name);
+        if (act === "remove") askRemove(p.name);
+      };
+    });
+    list.appendChild(card);
+  });
+}
+
+/* ---------------- actions ---------------- */
+
+async function doSwitch(name, force) {
+  let res;
+  try {
+    res = await window.goSwitch(name, !!force);
+  } catch (e) {
+    toast(errText(e), true);
+    return;
+  }
+
+  if (res.blocked) {
+    showModal("Claude Code is running",
+      "<p>" + res.blockedCount + " Claude Code process" + (res.blockedCount === 1 ? " is" : "es are") +
+      " running. A live session keeps using the current account and rewrites its configuration " +
+      "when it exits, which would undo this switch.</p>" +
+      "<p>Close Claude Code and try again, or switch anyway.</p>",
+      [
+        { label: "Cancel", onClick: closeModal },
+        { label: "Switch anyway", kind: "danger", onClick: () => { closeModal(); doSwitch(name, true); } }
+      ]);
+    return;
+  }
+
+  let msg = "Switched to " + res.to + (res.toEmail ? " (" + res.toEmail + ")" : "") + ".";
+  if (res.capturedAs) {
+    msg += res.newProfile
+      ? " Previous account saved as “" + res.capturedAs + "”."
+      : " Previous account’s tokens refreshed.";
+  }
+  await refresh();
+  showModal("Switched", "<p>" + esc(msg) + "</p><p><strong>Restart Claude Code</strong> for the new " +
+    "account to take effect — credentials are read at startup.</p>",
+    [{ label: "Done", kind: "primary", onClick: closeModal }]);
+}
+
+function askRename(name) {
+  showModal("Rename profile",
+    "<label for=\"f-name\">New name</label><input id=\"f-name\" value=\"" + esc(name) + "\">" +
+    '<div class="hint">The stored credentials are kept. No spaces, and it cannot start with a dash.</div>',
+    [
+      { label: "Cancel", onClick: closeModal },
+      { label: "Rename", kind: "primary", onClick: async () => {
+          const v = $("f-name").value.trim();
+          if (!v || v === name) { closeModal(); return; }
+          try { await window.goRename(name, v); } catch (e) { modalError(errText(e)); return; }
+          closeModal(); await refresh(); toast("Renamed to “" + v + "”");
+        } }
+    ]);
+  const inp = $("f-name");
+  inp.onkeydown = (e) => { if (e.key === "Enter") $("modal-foot").lastChild.click(); };
+}
+
+function askRemove(name) {
+  showModal("Remove profile",
+    "<p>Remove <strong>" + esc(name) + "</strong>?</p>" +
+    "<p>This discards the stored credentials for that account. Unless it is the account you are " +
+    "currently signed into, restoring it means signing in through a browser again.</p>",
+    [
+      { label: "Cancel", onClick: closeModal },
+      { label: "Remove", kind: "danger", onClick: async () => {
+          try { await window.goRemove(name); } catch (e) { modalError(errText(e)); return; }
+          closeModal(); await refresh(); toast("Removed “" + name + "”");
+        } }
+    ]);
+}
+
+function askCapture() {
+  if (!state || !state.loggedIn) {
+    toast("No account is signed into Claude Code right now", true);
+    return;
+  }
+  showModal("Capture the current login",
+    "<p>Saving <strong>" + esc(state.email || "the signed-in account") + "</strong>.</p>" +
+    '<label for="f-cap">Save as</label><input id="f-cap" placeholder="leave blank to use the email">' +
+    '<div class="hint">Capture before you sign out. /logout destroys the refresh token, and once ' +
+    "it is gone there is nothing left to save.</div>",
+    [
+      { label: "Cancel", onClick: closeModal },
+      { label: "Save", kind: "primary", onClick: async () => {
+          let p;
+          try { p = await window.goCapture($("f-cap").value); } catch (e) { modalError(errText(e)); return; }
+          closeModal(); await refresh(); toast("Saved as “" + p.name + "”");
+        } }
+    ]);
+  $("f-cap").onkeydown = (e) => { if (e.key === "Enter") $("modal-foot").lastChild.click(); };
+}
+
+async function showDoctor() {
+  let text;
+  try { text = await window.goDoctor(); } catch (e) { toast(errText(e), true); return; }
+  showModal("Diagnostics",
+    "<p>Safe to share: this never contains token material.</p><pre>" + esc(text) + "</pre>",
+    [{ label: "Close", kind: "primary", onClick: closeModal }]);
+}
+
+async function showSettings() {
+  let s;
+  try { s = await window.goSettingsGet(); } catch (e) { toast(errText(e), true); return; }
+
+  showModal("Settings",
+    '<label for="s-dir">Claude Code config directory</label>' +
+    '<input id="s-dir" value="' + esc(s.claudeConfigDir) + '" placeholder="auto-detect">' +
+    '<div class="hint">Pinning this keeps the CLI, tray, extension and this app in agreement, ' +
+    "even when they inherit different environments.</div>" +
+    '<label for="s-backend">Credentials backend</label>' +
+    '<select id="s-backend">' +
+      '<option value="auto">auto (platform default)</option>' +
+      '<option value="file">file</option>' +
+      '<option value="keychain">keychain</option>' +
+    "</select>" +
+    '<div class="hint">Use <code>file</code> on macOS over SSH or in tmux, where the Keychain is ' +
+    "unreachable.</div>" +
+    '<label><input type="checkbox" id="s-guard" style="width:auto;margin-right:8px">' +
+    "Refuse to switch while Claude Code is running</label>" +
+    '<div class="hint">' + esc(s.settingsPath) + "</div>",
+    [
+      { label: "Cancel", onClick: closeModal },
+      { label: "Save", kind: "primary", onClick: async () => {
+          try {
+            await window.goSettingsSet($("s-dir").value, $("s-backend").value, $("s-guard").checked);
+          } catch (e) { modalError(errText(e)); return; }
+          closeModal(); await refresh(); toast("Settings saved");
+        } }
+    ]);
+  $("s-backend").value = s.credentialsBackend;
+  $("s-guard").checked = s.requireClosedSessions;
+}
+
+/* ---------------- wiring ---------------- */
+
+$("btn-capture").onclick = askCapture;
+$("btn-refresh").onclick = () => refresh().then(() => toast("Refreshed"));
+$("btn-doctor").onclick = showDoctor;
+$("btn-settings").onclick = showSettings;
+$("scrim").onclick = (e) => { if (e.target === $("scrim")) closeModal(); };
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
+
+refresh();
+</script>
+</body>
+</html>

@@ -30,6 +30,9 @@
 .PARAMETER Tray
     Also install the system tray app.
 
+.PARAMETER Gui
+    Also install the desktop app, a window for managing accounts.
+
 .PARAMETER NoVerify
     Skip SHA256 verification. Not recommended.
 
@@ -46,6 +49,7 @@ param(
     [string]$Version = 'latest',
     [string]$InstallDir = "$env:LOCALAPPDATA\Programs\ccm",
     [switch]$Tray,
+    [switch]$Gui,
     [switch]$NoVerify
 )
 
@@ -246,6 +250,9 @@ function Invoke-CcmInstall {
 
         if ($Tray) {
             Install-Asset -Asset "ccm-tray-windows-$arch.exe" -TargetName 'ccm-tray.exe' -Staging $staging -Checksums $checksums
+        }
+        if ($Gui) {
+            Install-Asset -Asset "ccm-gui-windows-$arch.exe" -TargetName 'ccm-gui.exe' -Staging $staging -Checksums $checksums
         }
 
         $added = Add-ToUserPath -Directory $InstallDir
