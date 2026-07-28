@@ -102,9 +102,19 @@ jobs:
         run: npm run compile
         working-directory: extension
 
+      # On a tag, stamp the release version into the VSIX so the installed
+      # extension reports the same version as the release it came from. On a
+      # branch push there is no version to stamp, so package.json is left alone.
       - name: Package VSIX
-        run: npx --yes @vscode/vsce package --out ccm-extension.vsix
+        shell: bash
         working-directory: extension
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            version="${GITHUB_REF_NAME#v}"
+            echo "stamping extension version ${version}"
+            npm version "${version}" --no-git-tag-version --allow-same-version
+          fi
+          npx --yes @vscode/vsce package --out ccm-extension.vsix
 
       - uses: actions/upload-artifact@v4
         with:
