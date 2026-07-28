@@ -1,12 +1,12 @@
 {
     "architecture": {
         "64bit": {
-            "hash": "0e28e8a70d627f89a02db058ef923861d0fafcab9325885d488905c9e2b26c22",
-            "url": "https://github.com/MAbbasRaza/claude-code-credential-manager/releases/download/v0.1.1/ccm-windows-amd64.exe#/ccm.exe"
+            "hash": "139f5fb9cf0b38048a4415e14616a897b6d7d178ecc7eec727616740682936ed",
+            "url": "https://github.com/MAbbasRaza/claude-code-credential-manager/releases/download/v0.1.2/ccm-windows-amd64.exe#/ccm.exe"
         },
         "arm64": {
-            "hash": "850adcd506dc03fedfc04c0f791fcee720c068d74da3f0df11ac9d203f18e00b",
-            "url": "https://github.com/MAbbasRaza/claude-code-credential-manager/releases/download/v0.1.1/ccm-windows-arm64.exe#/ccm.exe"
+            "hash": "f7a6cd5bd5de849ffb12ffec72b0d4f68b509a6f0095966642d9b8cc28208c55",
+            "url": "https://github.com/MAbbasRaza/claude-code-credential-manager/releases/download/v0.1.2/ccm-windows-arm64.exe#/ccm.exe"
         }
     },
     "autoupdate": {
@@ -36,5 +36,5 @@
         "Write-Host ''",
         "Write-Host 'Capture your account BEFORE running /logout in Claude Code.' -ForegroundColor Yellow"
     ],
-    "version": "0.1.1"
+    "version": "0.1.2"
 }
