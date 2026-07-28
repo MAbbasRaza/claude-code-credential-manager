@@ -202,15 +202,33 @@ func TestSwitchGuardIsReturnedAsDataNotError(t *testing.T) {
 		// on a developer machine but not necessarily in CI.
 		t.Fatalf("a refusal must not surface as an error: %v", err)
 	}
+
+	if res.Blocked && res.Undetermined {
+		t.Error("Blocked and Undetermined are different states and must be mutually exclusive")
+	}
 	if res.Blocked {
 		if res.BlockedCount < 1 {
-			t.Error("a Blocked result should report how many processes are running")
+			t.Error("a Blocked result must report a real process count; reporting zero " +
+				"invites the user to override a guard that did fire")
+		}
+		if len(res.BlockedPIDs) != res.BlockedCount {
+			t.Errorf("BlockedPIDs has %d entries but BlockedCount is %d",
+				len(res.BlockedPIDs), res.BlockedCount)
 		}
 		if res.Message == "" {
 			t.Error("a Blocked result should carry the explanation")
 		}
 		if res.Switched {
 			t.Error("Blocked and Switched must not both be set")
+		}
+	}
+	if res.Undetermined {
+		if res.BlockedCount != 0 {
+			t.Error("an undetermined result has no process count to report")
+		}
+		if res.Message == "" {
+			t.Error("an undetermined result must carry the real reason; discarding it " +
+				"leaves the user with no way to find out why switching is refused")
 		}
 	}
 }
@@ -392,10 +410,13 @@ func TestJSONContractMatchesThePage(t *testing.T) {
 
 	check("Overview", Overview{}, []string{
 		"profiles", "loggedIn", "email", "organization", "plan",
-		"activeName", "configDir", "runningCode",
+		"activeName", "configDir", "runningCode", "runningUnknown", "runningError",
 	})
 	check("Profile", Profile{}, []string{"name", "email", "organization", "plan", "active", "expiry", "expired"})
-	check("SwitchResult", SwitchResult{}, []string{"switched", "to", "toEmail", "capturedAs", "newProfile", "blocked", "blockedCount"})
+	check("SwitchResult", SwitchResult{}, []string{
+		"switched", "to", "toEmail", "capturedAs", "newProfile",
+		"blocked", "blockedCount", "blockedPids", "undetermined", "message",
+	})
 	check("Settings", Settings{}, []string{"claudeConfigDir", "credentialsBackend", "requireClosedSessions", "settingsPath"})
 
 	// And the reverse direction: every goX function the page calls must be

@@ -238,8 +238,14 @@ async function refresh() {
     $("who-sub").textContent = "Run /login in Claude Code, then capture the account.";
   }
 
+  // Three states. "Could not tell" must never render as "nothing running":
+  // that is exactly when the guard is inoperative and the user needs to know.
   const banner = $("banner");
-  if (state.runningCode > 0) {
+  if (state.runningUnknown) {
+    banner.textContent = "Cannot tell whether Claude Code is running on this machine, so switching " +
+      "will be refused rather than risked. " + (state.runningError || "");
+    banner.classList.add("show");
+  } else if (state.runningCode > 0) {
     banner.textContent = "Claude Code is running (" + state.runningCode + " process" +
       (state.runningCode === 1 ? "" : "es") + "). Switching is blocked because a live session " +
       "rewrites its configuration when it exits, which would undo the switch.";
@@ -314,15 +320,32 @@ async function doSwitch(name, force) {
   }
 
   if (res.blocked) {
+    const pids = (res.blockedPids || []).join(", ");
     showModal("Claude Code is running",
       "<p>" + res.blockedCount + " Claude Code process" + (res.blockedCount === 1 ? " is" : "es are") +
-      " running. A live session keeps using the current account and rewrites its configuration " +
+      " running" + (pids ? " (pid " + esc(pids) + ")" : "") +
+      ". A live session keeps using the current account and rewrites its configuration " +
       "when it exits, which would undo this switch.</p>" +
       "<p>Close Claude Code and try again, or switch anyway.</p>",
       [
         { label: "Cancel", onClick: closeModal },
         { label: "Switch anyway", kind: "danger", onClick: () => { closeModal(); doSwitch(name, true); } }
       ]);
+    return;
+  }
+
+  // Distinct from the above on purpose. Here the guard did not fire, it failed,
+  // so there is no process count to show and no honest basis for a one-click
+  // override. The real reason is displayed rather than discarded.
+  if (res.undetermined) {
+    showModal("Cannot check for running sessions",
+      "<p>ccm could not determine whether Claude Code is running on this machine, so it refused " +
+      "the switch rather than risk a live session undoing it.</p>" +
+      "<pre>" + esc(res.message || "") + "</pre>" +
+      "<p>Close Claude Code, then use Diagnostics to confirm. Overriding is possible from the " +
+      "command line with <code>ccm use " + esc(name) + " --force</code> if you are certain nothing " +
+      "is running.</p>",
+      [{ label: "Close", kind: "primary", onClick: closeModal }]);
     return;
   }
 

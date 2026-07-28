@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -45,9 +46,13 @@ type Overview struct {
 	Plan         string `json:"plan"`
 	ActiveName   string `json:"activeName"`
 
-	ConfigDir   string `json:"configDir"`
-	VaultPath   string `json:"vaultPath"`
-	RunningCode int    `json:"runningCode"`
+	ConfigDir string `json:"configDir"`
+	VaultPath string `json:"vaultPath"`
+
+	// RunningCode is meaningful only when RunningUnknown is false.
+	RunningCode    int    `json:"runningCode"`
+	RunningUnknown bool   `json:"runningUnknown"`
+	RunningError   string `json:"runningError"`
 }
 
 func (a *api) List() (Overview, error) {
@@ -71,8 +76,14 @@ func (a *api) List() (Overview, error) {
 		VaultPath:    m.Vault.Path,
 		Profiles:     []Profile{},
 	}
+	// Three states, not two. "Could not tell" must not render as "nothing is
+	// running", because that is the state in which the running-session guard is
+	// inoperative and the user most needs to know.
 	if procs, err := proc.FindClaude(); err == nil {
 		out.RunningCode = len(procs)
+	} else {
+		out.RunningUnknown = true
+		out.RunningError = err.Error()
 	}
 
 	for _, p := range m.Vault.List() {
@@ -104,8 +115,13 @@ type SwitchResult struct {
 	CapturedAs string `json:"capturedAs"`
 	NewProfile bool   `json:"newProfile"`
 
-	Blocked      bool   `json:"blocked"`
-	BlockedCount int    `json:"blockedCount"`
+	// Blocked means a live session was found and the user may override.
+	Blocked      bool  `json:"blocked"`
+	BlockedCount int   `json:"blockedCount"`
+	BlockedPIDs  []int `json:"blockedPids"`
+	// Undetermined means ccm could not tell what is running. The guard is
+	// inoperative rather than triggered, which is a different thing to say.
+	Undetermined bool   `json:"undetermined"`
 	Message      string `json:"message"`
 }
 
@@ -117,16 +133,33 @@ func (a *api) Switch(name string, force bool) (SwitchResult, error) {
 
 	res, err := m.Switch(name, force)
 	if err != nil {
-		// The running-Claude-Code refusal is not a failure to report and
-		// forget; it is a decision to put back to the user, so it comes back
-		// as data rather than an error.
-		if strings.Contains(err.Error(), "Claude Code is running") {
-			count := 0
-			if procs, e := proc.FindClaude(); e == nil {
-				count = len(procs)
-			}
-			return SwitchResult{Blocked: true, BlockedCount: count, To: name, Message: err.Error()}, nil
+		// A refusal is not a failure to report and forget; it is a decision to
+		// put back to the user, so it comes back as data rather than an error.
+		//
+		// Classified by type, never by message text. The detection-failure
+		// message contains the words "Claude Code is running", so a substring
+		// test reports a broken guard as a live session and invites the user to
+		// override it with a process count of zero.
+		var running *manager.ErrClaudeRunning
+		if errors.As(err, &running) {
+			return SwitchResult{
+				Blocked:      true,
+				BlockedCount: len(running.Procs),
+				BlockedPIDs:  running.PIDs(),
+				To:           name,
+				Message:      err.Error(),
+			}, nil
 		}
+
+		var undetermined *manager.ErrDetectionFailed
+		if errors.As(err, &undetermined) {
+			return SwitchResult{
+				Undetermined: true,
+				To:           name,
+				Message:      err.Error(),
+			}, nil
+		}
+
 		return SwitchResult{}, err
 	}
 
@@ -208,7 +241,13 @@ func (a *api) Doctor() (string, error) {
 	for _, names := range m.Vault.DuplicateAccounts() {
 		warnings = append(warnings, "Duplicate profiles for one account: "+strings.Join(names, ", "))
 	}
-	if procs, err := proc.FindClaude(); err == nil && len(procs) > 0 {
+	// Matches what the CLI's doctor reports. A swallowed enumeration error made
+	// the pasteable report claim "No warnings" on precisely the machines where
+	// the running-session guard does not work.
+	if procs, err := proc.FindClaude(); err != nil {
+		warnings = append(warnings, "Could not enumerate processes: "+err.Error()+
+			"\n    The running-session guard cannot work on this machine; switches will be refused.")
+	} else if len(procs) > 0 {
 		warnings = append(warnings, fmt.Sprintf(
 			"Claude Code is running (%d process(es)); switching now would be undone when it exits.", len(procs)))
 	}

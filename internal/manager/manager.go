@@ -186,33 +186,21 @@ func (m *Manager) withVaultLock(operation string, fn func() error) error {
 // A detection failure is treated as unsafe rather than safe: if ccm cannot
 // tell whether Claude Code is running, it declines instead of risking a
 // clobbered switch.
+// The two refusals are returned as distinct types so callers can classify with
+// errors.As rather than by inspecting the message. See errors.go for why that
+// distinction is load-bearing.
 func (m *Manager) EnsureClosed(force bool) error {
 	if force || !m.Settings.ShouldRequireClosedSessions() {
 		return nil
 	}
 	procs, err := proc.FindClaude()
 	if err != nil {
-		return fmt.Errorf("could not determine whether Claude Code is running (%w); "+
-			"close Claude Code and retry, or pass --force", err)
+		return &ErrDetectionFailed{Err: err}
 	}
 	if len(procs) == 0 {
 		return nil
 	}
-	var b strings.Builder
-	fmt.Fprintf(&b, "Claude Code is running (%d process", len(procs))
-	if len(procs) != 1 {
-		b.WriteString("es")
-	}
-	b.WriteString("): ")
-	for i, p := range procs {
-		if i > 0 {
-			b.WriteString(", ")
-		}
-		fmt.Fprintf(&b, "pid %d", p.PID)
-	}
-	b.WriteString(".\nA running session keeps using the old account and rewrites .claude.json when it exits, " +
-		"which would undo the switch. Close Claude Code and retry, or pass --force to override.")
-	return errors.New(b.String())
+	return &ErrClaudeRunning{Procs: procs}
 }
 
 // Capture stores the live account into the vault under name.

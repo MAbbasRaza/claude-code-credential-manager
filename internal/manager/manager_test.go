@@ -78,6 +78,24 @@ func newEnv(t *testing.T) (claudeDir string) {
 	return claudeDir
 }
 
+// homeDirFor reports the CCM_HOME newEnv installed, for tests that need to
+// rewrite the settings file.
+func homeDirFor(t *testing.T) string {
+	t.Helper()
+	return os.Getenv("CCM_HOME")
+}
+
+// writeSettings replaces the settings file, chiefly to flip the
+// running-session guard that newEnv disables.
+func writeSettings(t *testing.T, ccmHome, claudeDir string, requireClosed bool) {
+	t.Helper()
+	body := `{"claudeConfigDir":` + quote(claudeDir) +
+		`,"requireClosedSessions":` + map[bool]string{true: "true", false: "false"}[requireClosed] + `}`
+	if err := os.WriteFile(filepath.Join(ccmHome, "config.json"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func quote(s string) string {
 	b, _ := jsonMarshalString(s)
 	return b

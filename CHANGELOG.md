@@ -4,6 +4,30 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-07-29
+
+### Fixed
+
+- The desktop app misreported a broken running-session check as a live session. `manager` refuses
+  a switch when it cannot determine what is running, and that refusal reads "could not determine
+  whether Claude Code is running". The app classified refusals with a substring test for "Claude
+  Code is running", which that sentence contains, so a machine where process enumeration fails
+  showed a modal reading "0 Claude Code processes are running" beside a "Switch anyway" button.
+  A user who correctly believed nothing was running would override a guard that had not fired.
+  Refusals are now distinguished by type rather than by message text, and the two states are
+  presented differently: one names the process IDs and offers an override, the other says the
+  check itself failed, shows the real reason, and does not.
+- The app also treated an enumeration failure as "nothing is running" in the header banner and in
+  Diagnostics, so a report pasted into a bug thread claimed "No warnings" on exactly the machines
+  where the guard was inoperative. Both now say so, matching what the CLI already did.
+
+### Added
+
+- Tests for the desktop app's binding layer and for `internal/proc`, both of which shipped
+  untested. Two assert that no token material reaches the page or the diagnostics text, which the
+  UI advertises as safe to share. One pins the JSON contract in both directions, since a mismatch
+  between a Go tag and the property the page reads renders a blank field with no error anywhere.
+
 ## [0.2.0] - 2026-07-28
 
 ### Added
