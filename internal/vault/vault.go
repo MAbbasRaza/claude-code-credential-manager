@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/MAbbasRaza/claude-code-credential-manager/internal/config"
@@ -260,6 +261,59 @@ func (v *Vault) Delete(name string) error {
 		return fmt.Errorf("%w: %q", ErrNotFound, name)
 	}
 	delete(v.doc.Profiles, name)
+	return nil
+}
+
+// ErrBadName reports a profile name that cannot be used.
+var ErrBadName = errors.New("invalid profile name")
+
+// ValidateName rejects names that would be confusing or unusable.
+//
+// A name is typed as a bare CLI argument, so anything starting with a dash
+// would be parsed as a flag, and whitespace makes it awkward to pass at all.
+func ValidateName(name string) error {
+	if strings.TrimSpace(name) == "" {
+		return fmt.Errorf("%w: must not be empty", ErrBadName)
+	}
+	if name != strings.TrimSpace(name) {
+		return fmt.Errorf("%w: %q has leading or trailing whitespace", ErrBadName, name)
+	}
+	if strings.HasPrefix(name, "-") {
+		return fmt.Errorf("%w: %q starts with a dash, which the CLI reads as a flag", ErrBadName, name)
+	}
+	if strings.ContainsAny(name, " \t\n\r") {
+		return fmt.Errorf("%w: %q contains whitespace", ErrBadName, name)
+	}
+	return nil
+}
+
+// Rename moves a profile to a new name, keeping its stored credentials.
+//
+// This exists so renaming never has to go through delete-then-recapture.
+// Recapturing only works for the account currently signed into Claude Code, so
+// for a parked profile that sequence would destroy the only copy of its refresh
+// token and leave a browser sign-in as the only way back.
+func (v *Vault) Rename(oldName, newName string) error {
+	if err := ValidateName(newName); err != nil {
+		return err
+	}
+	p, ok := v.doc.Profiles[oldName]
+	if !ok {
+		return fmt.Errorf("%w: %q", ErrNotFound, oldName)
+	}
+	if oldName == newName {
+		return nil
+	}
+	if _, taken := v.doc.Profiles[newName]; taken {
+		return fmt.Errorf("profile %q already exists; pick another name or remove it first", newName)
+	}
+
+	p.Name = newName
+	if p.Label == "" {
+		p.Label = p.EmailAddress
+	}
+	delete(v.doc.Profiles, oldName)
+	v.doc.Profiles[newName] = p
 	return nil
 }
 

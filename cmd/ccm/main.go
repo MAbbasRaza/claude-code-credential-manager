@@ -91,6 +91,11 @@ func run(args []string) error {
 			return errors.New("usage: ccm rm <profile>")
 		}
 		return cmdRemove(g, rest[1])
+	case "rename", "mv":
+		if len(rest) < 3 {
+			return errors.New("usage: ccm rename <old-name> <new-name>")
+		}
+		return cmdRename(g, rest[1], rest[2])
 	case "status":
 		return cmdStatus(g)
 	case "config":
@@ -113,6 +118,7 @@ USAGE
   ccm list                       list profiles, marking the active one
   ccm use <profile>              switch to a profile
   ccm add [name]                 capture the current login as a profile
+  ccm rename <old> <new>         rename a profile, keeping its credentials
   ccm rm <profile>               remove a profile
   ccm status                     show the active account
   ccm config get|set|path        read or change ccm's own settings
@@ -279,6 +285,24 @@ func cmdRemove(g globalOpts, name string) error {
 		return emitJSON(map[string]any{"removed": name})
 	}
 	fmt.Printf("Removed profile %q.\n", name)
+	return nil
+}
+
+func cmdRename(g globalOpts, oldName, newName string) error {
+	m, err := manager.Open(g.configDir)
+	if err != nil {
+		return err
+	}
+	if err := m.Rename(oldName, newName); err != nil {
+		if errors.Is(err, vault.ErrNotFound) {
+			return fmt.Errorf("%w\nRun `ccm list` to see available profiles", err)
+		}
+		return err
+	}
+	if g.jsonOut {
+		return emitJSON(map[string]any{"renamed": oldName, "to": newName})
+	}
+	fmt.Printf("Renamed %q to %q. Its stored credentials are unchanged.\n", oldName, newName)
 	return nil
 }
 

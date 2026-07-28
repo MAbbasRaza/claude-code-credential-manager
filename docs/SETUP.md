@@ -117,6 +117,19 @@ From here on, switching never touches the network and never opens a browser.
 
 ---
 
+## Renaming and removing profiles
+
+```bash
+ccm rename work day-job     # keeps the stored credentials
+ccm rm old-account
+```
+
+Use `ccm rename` rather than removing and re-adding. Re-adding only works for the account
+currently signed into Claude Code, so for any other profile that sequence would discard the only
+stored copy of its refresh token and leave a browser sign-in as the only way back.
+
+---
+
 ## Optional: the tray app
 
 Run `ccm-tray`. It puts an icon in your system tray with one entry per account; click one to

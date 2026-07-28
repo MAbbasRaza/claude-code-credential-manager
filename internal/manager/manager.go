@@ -242,6 +242,21 @@ func (m *Manager) Remove(name string) error {
 	})
 }
 
+// Rename changes a profile's name, keeping its credentials.
+//
+// Renaming needs a first-class operation because the obvious alternative,
+// removing and re-capturing, only works for the account currently signed into
+// Claude Code. Applied to a parked profile it would delete the only copy of a
+// refresh token that nothing can regenerate without a browser sign-in.
+func (m *Manager) Rename(oldName, newName string) error {
+	return m.withVaultLock("rename "+oldName, func() error {
+		if err := m.Vault.Rename(oldName, newName); err != nil {
+			return err
+		}
+		return m.Vault.Save()
+	})
+}
+
 // captureLocked requires the vault lock to be held and the vault freshly read.
 func (m *Manager) captureLocked(name string) (*vault.Profile, error) {
 	creds, id, err := m.readLive()
@@ -268,9 +283,10 @@ func (m *Manager) captureLocked(name string) (*vault.Profile, error) {
 			return nil, fmt.Errorf(
 				"account %s is already saved as profile %q.\n"+
 					"Storing it twice would break switching: only one copy would receive refreshed\n"+
-					"tokens and the other would go stale. To rename it, run `ccm rm %s` first,\n"+
-					"or just run `ccm add %s` to refresh the existing profile.",
-				orUnknownEmail(id.EmailAddress), existing.Name, existing.Name, existing.Name)
+					"tokens and the other would go stale.\n\n"+
+					"  ccm rename %s %s   rename it, keeping the stored credentials\n"+
+					"  ccm add %s          refresh the existing profile in place",
+				orUnknownEmail(id.EmailAddress), existing.Name, existing.Name, name, existing.Name)
 		}
 		// Same profile, or no name given: refresh it in place.
 		existing.ClaudeAiOauth = creds.ClaudeAiOauth

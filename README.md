@@ -170,6 +170,7 @@ ccm init                       detect and pin the Claude Code config directory
 ccm list                       list profiles, marking the active one
 ccm use <profile>              switch
 ccm add [name]                 capture the current login
+ccm rename <old> <new>         rename a profile, keeping its credentials
 ccm rm <profile>               remove a profile
 ccm status                     show the active account
 ccm config get|set|path        read or change ccm's own settings

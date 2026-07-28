@@ -381,6 +381,82 @@ func TestExactlyOneProfileIsActive(t *testing.T) {
 	}
 }
 
+// A renamed profile must still be usable for switching. This is the end-to-end
+// version of the reason rename exists at all: the credentials have to survive
+// so the account can be switched back to without a browser sign-in.
+func TestRenamedProfileStillSwitches(t *testing.T) {
+	dir := newEnv(t)
+
+	writeLive(t, dir, credsDoc("A-ACCESS", "A-REFRESH"), configDoc("acct-a", "a@example.invalid"))
+	m, err := Open("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Capture("work"); err != nil {
+		t.Fatal(err)
+	}
+
+	m2, _ := Open("")
+	if err := m2.Rename("work", "day-job"); err != nil {
+		t.Fatalf("Rename: %v", err)
+	}
+
+	// Sign in as a different account, then switch back using the new name.
+	writeLive(t, dir, credsDoc("B-ACCESS", "B-REFRESH"), configDoc("acct-b", "b@example.invalid"))
+	m3, _ := Open("")
+	if _, err := m3.Switch("day-job", false); err != nil {
+		t.Fatalf("switching to the renamed profile: %v", err)
+	}
+
+	creds, cfg := readLiveFiles(t, dir)
+	if got := gjson.GetBytes(creds, "claudeAiOauth.accessToken").String(); got != "A-ACCESS" {
+		t.Errorf("accessToken = %q, want A-ACCESS", got)
+	}
+	if got := gjson.GetBytes(cfg, "oauthAccount.accountUuid").String(); got != "acct-a" {
+		t.Errorf("accountUuid = %q, want acct-a", got)
+	}
+}
+
+// After a rename, capture-on-switch must find the profile by account and update
+// the renamed entry rather than creating a duplicate under the old identity.
+func TestCaptureOnSwitchFollowsARename(t *testing.T) {
+	dir := newEnv(t)
+
+	writeLive(t, dir, credsDoc("A-ACCESS", "A-REFRESH"), configDoc("acct-a", "a@example.invalid"))
+	m, _ := Open("")
+	if _, err := m.Capture("work"); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Rename("work", "day-job"); err != nil {
+		t.Fatal(err)
+	}
+
+	writeLive(t, dir, credsDoc("B-ACCESS", "B-REFRESH"), configDoc("acct-b", "b@example.invalid"))
+	m2, _ := Open("")
+	if _, err := m2.Capture("personal"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Account A signs back in and its token rotates, then we switch away.
+	writeLive(t, dir, credsDoc("A-ACCESS-V2", "A-REFRESH-V2"), configDoc("acct-a", "a@example.invalid"))
+	m3, _ := Open("")
+	if _, err := m3.Switch("personal", false); err != nil {
+		t.Fatalf("switch: %v", err)
+	}
+
+	m4, _ := Open("")
+	if n := len(m4.Vault.List()); n != 2 {
+		t.Errorf("vault holds %d profiles, want 2; a rename should not spawn a duplicate", n)
+	}
+	p, err := m4.Vault.Get("day-job")
+	if err != nil {
+		t.Fatalf("renamed profile is gone: %v", err)
+	}
+	if got := gjson.ParseBytes(p.ClaudeAiOauth).Get("refreshToken").String(); got != "A-REFRESH-V2" {
+		t.Errorf("renamed profile refreshToken = %q, want the rotated A-REFRESH-V2", got)
+	}
+}
+
 func TestSwitchToUnknownProfileFails(t *testing.T) {
 	dir := newEnv(t)
 	writeLive(t, dir, credsDoc("A-ACCESS", "A-REFRESH"), configDoc("acct-a", "a@example.invalid"))

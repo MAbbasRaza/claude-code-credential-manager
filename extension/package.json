@@ -34,6 +34,21 @@
         "category": "Claude Code Credential Manager"
       },
       {
+        "command": "ccm.manageAccounts",
+        "title": "Claude: Manage Accounts",
+        "category": "Claude Code Credential Manager"
+      },
+      {
+        "command": "ccm.renameProfile",
+        "title": "Claude: Rename Account Profile",
+        "category": "Claude Code Credential Manager"
+      },
+      {
+        "command": "ccm.removeProfile",
+        "title": "Claude: Remove Account Profile",
+        "category": "Claude Code Credential Manager"
+      },
+      {
         "command": "ccm.doctor",
         "title": "Claude: Diagnose Credential Manager",
         "category": "Claude Code Credential Manager"

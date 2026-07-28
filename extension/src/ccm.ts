@@ -128,6 +128,14 @@ export async function capture(name?: string): Promise<{ captured: string; email?
   return runJson<{ captured: string; email?: string }>(args);
 }
 
+export async function rename(oldName: string, newName: string): Promise<void> {
+  await runJson<{ renamed: string; to: string }>(["rename", oldName, newName]);
+}
+
+export async function remove(name: string): Promise<void> {
+  await runJson<{ removed: string }>(["rm", name]);
+}
+
 export async function doctor(): Promise<string> {
   return run(["doctor"]);
 }

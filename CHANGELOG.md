@@ -4,6 +4,24 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2026-07-28
+
+### Added
+
+- `ccm rename <old> <new>`, which moves a profile while keeping its stored credentials.
+- A management UI in the VS Code extension: **Claude: Manage Accounts** lists every profile with
+  inline rename and remove buttons, alongside separate rename and remove commands.
+
+### Fixed
+
+- The error raised when an account is already stored under another name recommended
+  `ccm rm <name>` as the way to rename it. That advice was destructive. Re-adding only works for
+  the account currently signed into Claude Code, so following it for a parked profile discarded
+  the only stored copy of a refresh token that nothing can regenerate without a browser sign-in.
+  It now points at `ccm rename`.
+
+[0.1.2]: https://github.com/MAbbasRaza/claude-code-credential-manager/releases/tag/v0.1.2
+
 ## [0.1.1] - 2026-07-28
 
 ### Added

@@ -16,6 +16,9 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand("ccm.switchAccount", switchAccount),
     vscode.commands.registerCommand("ccm.captureAccount", captureAccount),
+    vscode.commands.registerCommand("ccm.manageAccounts", manageAccounts),
+    vscode.commands.registerCommand("ccm.renameProfile", () => renameProfile()),
+    vscode.commands.registerCommand("ccm.removeProfile", () => removeProfile()),
     vscode.commands.registerCommand("ccm.doctor", showDoctor),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration("ccm")) {
@@ -200,6 +203,197 @@ async function performSwitch(name: string, force: boolean): Promise<void> {
     }
     await reportError(err, `switch to ${name}`);
   }
+}
+
+const renameButton: vscode.QuickInputButton = {
+  iconPath: new vscode.ThemeIcon("edit"),
+  tooltip: "Rename this profile"
+};
+
+const removeButton: vscode.QuickInputButton = {
+  iconPath: new vscode.ThemeIcon("trash"),
+  tooltip: "Remove this profile"
+};
+
+/**
+ * A single place to switch, rename and remove profiles.
+ *
+ * Built on createQuickPick rather than showQuickPick because only the former
+ * supports per-item buttons. That matters: renaming from a tray menu is
+ * impossible since tray menus cannot take text input, so this panel is the
+ * management surface for anyone who would rather not use the CLI.
+ */
+async function manageAccounts(): Promise<void> {
+  let listed;
+  try {
+    listed = await ccm.list();
+  } catch (err) {
+    await reportError(err, "list accounts");
+    return;
+  }
+
+  const profiles = listed.profiles ?? [];
+  if (profiles.length === 0) {
+    const pick = await vscode.window.showInformationMessage(
+      "No Claude Code profiles saved yet. Sign in with /login, then capture the account.",
+      "Capture current login"
+    );
+    if (pick) {
+      await captureAccount();
+    }
+    return;
+  }
+
+  const picker = vscode.window.createQuickPick<ProfileItem>();
+  picker.title = "Manage Claude Code accounts";
+  picker.placeholder = "Pick an account to switch to, or use the buttons to rename or remove";
+  picker.matchOnDescription = true;
+  picker.items = profiles.map((p) => ({
+    profileName: p.name,
+    label: p.active ? `$(check) ${p.name}` : `$(account) ${p.name}`,
+    description: p.email ?? "",
+    detail: [
+      p.organization ? `org: ${p.organization}` : undefined,
+      p.subscription ? `plan: ${p.subscription}` : undefined,
+      p.expired ? "access token expired" : undefined,
+      p.active ? "currently active" : undefined
+    ]
+      .filter(Boolean)
+      .join("   "),
+    buttons: [renameButton, removeButton]
+  }));
+
+  const done = new Promise<void>((resolve) => {
+    picker.onDidTriggerItemButton(async (e) => {
+      picker.hide();
+      if (e.button === renameButton) {
+        await renameProfile(e.item.profileName);
+      } else {
+        await removeProfile(e.item.profileName);
+      }
+      resolve();
+    });
+
+    picker.onDidAccept(async () => {
+      const chosen = picker.selectedItems[0];
+      picker.hide();
+      if (chosen) {
+        const active = profiles.find((p) => p.active);
+        if (active && active.name === chosen.profileName) {
+          vscode.window.showInformationMessage(`${chosen.profileName} is already the active account.`);
+        } else {
+          await performSwitch(chosen.profileName, false);
+        }
+      }
+      resolve();
+    });
+
+    picker.onDidHide(() => {
+      picker.dispose();
+      resolve();
+    });
+  });
+
+  picker.show();
+  await done;
+}
+
+/** Prompts for a profile when name is omitted, then for the new name. */
+async function renameProfile(name?: string): Promise<void> {
+  const target = name ?? (await pickProfileName("Rename which profile?"));
+  if (!target) {
+    return;
+  }
+
+  const next = await vscode.window.showInputBox({
+    title: `Rename "${target}"`,
+    prompt: "New name for this profile. The stored credentials are kept.",
+    value: target,
+    validateInput: (v) => {
+      const t = v.trim();
+      if (t.length === 0) {
+        return "The name cannot be empty";
+      }
+      if (t !== v) {
+        return "The name cannot start or end with a space";
+      }
+      if (t.startsWith("-")) {
+        return "The name cannot start with a dash";
+      }
+      if (/\s/.test(t)) {
+        return "The name cannot contain spaces";
+      }
+      return undefined;
+    }
+  });
+  if (!next || next === target) {
+    return;
+  }
+
+  try {
+    await ccm.rename(target, next);
+    vscode.window.showInformationMessage(`Renamed "${target}" to "${next}".`);
+    void refreshStatus();
+  } catch (err) {
+    await reportError(err, `rename ${target}`);
+  }
+}
+
+async function removeProfile(name?: string): Promise<void> {
+  const target = name ?? (await pickProfileName("Remove which profile?"));
+  if (!target) {
+    return;
+  }
+
+  // Modal, because this is the one destructive action here. Removing a parked
+  // profile discards the only stored copy of its refresh token, and getting it
+  // back means signing into that account through a browser again.
+  const confirmed = await vscode.window.showWarningMessage(
+    `Remove the profile "${target}"?`,
+    {
+      modal: true,
+      detail:
+        "This discards the stored credentials for that account. If it is not the account " +
+        "you are currently signed into, you will need to sign in through a browser again to restore it."
+    },
+    "Remove"
+  );
+  if (confirmed !== "Remove") {
+    return;
+  }
+
+  try {
+    await ccm.remove(target);
+    vscode.window.showInformationMessage(`Removed "${target}".`);
+    void refreshStatus();
+  } catch (err) {
+    await reportError(err, `remove ${target}`);
+  }
+}
+
+async function pickProfileName(title: string): Promise<string | undefined> {
+  let listed;
+  try {
+    listed = await ccm.list();
+  } catch (err) {
+    await reportError(err, "list accounts");
+    return undefined;
+  }
+  const profiles = listed.profiles ?? [];
+  if (profiles.length === 0) {
+    vscode.window.showInformationMessage("No Claude Code profiles saved yet.");
+    return undefined;
+  }
+  const chosen = await vscode.window.showQuickPick(
+    profiles.map((p) => ({
+      profileName: p.name,
+      label: p.name,
+      description: p.email ?? "",
+      detail: p.active ? "currently active" : undefined
+    })),
+    { title, matchOnDescription: true }
+  );
+  return chosen?.profileName;
 }
 
 async function captureAccount(): Promise<void> {

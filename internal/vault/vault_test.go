@@ -2,6 +2,7 @@ package vault
 
 import (
 	"encoding/json"
+	"errors"
 	"path/filepath"
 	"testing"
 )
@@ -138,6 +139,106 @@ func TestUniqueName(t *testing.T) {
 	}
 	if got := v.UniqueName(""); got != "captured" {
 		t.Errorf("UniqueName on an empty base = %q, want captured", got)
+	}
+}
+
+// Renaming has to preserve the credentials. The whole reason this operation
+// exists is that the obvious alternative, remove and re-capture, only works for
+// the account currently signed into Claude Code and would otherwise destroy a
+// refresh token nothing can regenerate offline.
+func TestRenamePreservesCredentials(t *testing.T) {
+	v := openTemp(t)
+	p := newProfile("work", "acct-a")
+	p.ClaudeAiOauth = json.RawMessage(`{"accessToken":"KEEP-ME","refreshToken":"KEEP-ME-TOO"}`)
+	v.Put(p)
+
+	if err := v.Rename("work", "day-job"); err != nil {
+		t.Fatalf("Rename: %v", err)
+	}
+
+	if _, err := v.Get("work"); err == nil {
+		t.Error("the old name should no longer resolve")
+	}
+	got, err := v.Get("day-job")
+	if err != nil {
+		t.Fatalf("Get(day-job): %v", err)
+	}
+	if got.Name != "day-job" {
+		t.Errorf("Name = %q, want day-job", got.Name)
+	}
+	if got.AccountUUID != "acct-a" {
+		t.Errorf("AccountUUID = %q, want acct-a", got.AccountUUID)
+	}
+	if string(got.ClaudeAiOauth) != `{"accessToken":"KEEP-ME","refreshToken":"KEEP-ME-TOO"}` {
+		t.Errorf("credentials were altered: %s", got.ClaudeAiOauth)
+	}
+	if n := len(v.List()); n != 1 {
+		t.Errorf("vault holds %d profiles, want 1", n)
+	}
+}
+
+func TestRenameRejectsCollisionAndMissing(t *testing.T) {
+	v := openTemp(t)
+	v.Put(newProfile("work", "acct-a"))
+	v.Put(newProfile("personal", "acct-b"))
+
+	if err := v.Rename("work", "personal"); err == nil {
+		t.Error("renaming onto an existing name must fail rather than overwrite it")
+	}
+	// The target must be untouched by the failed attempt.
+	if p, err := v.Get("personal"); err != nil || p.AccountUUID != "acct-b" {
+		t.Error("the existing profile was disturbed by a failed rename")
+	}
+	if err := v.Rename("nope", "whatever"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestRenameToSameNameIsANoOp(t *testing.T) {
+	v := openTemp(t)
+	v.Put(newProfile("work", "acct-a"))
+	if err := v.Rename("work", "work"); err != nil {
+		t.Fatalf("renaming to the same name should be harmless: %v", err)
+	}
+	if n := len(v.List()); n != 1 {
+		t.Errorf("vault holds %d profiles, want 1", n)
+	}
+}
+
+func TestValidateName(t *testing.T) {
+	valid := []string{"work", "day-job", "personal_2", "a", "Work.Account"}
+	for _, n := range valid {
+		if err := ValidateName(n); err != nil {
+			t.Errorf("ValidateName(%q) = %v, want nil", n, err)
+		}
+	}
+
+	invalid := map[string]string{
+		"empty":         "",
+		"only spaces":   "   ",
+		"leading dash":  "-force",
+		"inner space":   "my profile",
+		"trailing gap":  "work ",
+		"leading gap":   " work",
+		"embedded tab":  "wo\trk",
+		"embedded line": "wo\nrk",
+	}
+	for label, n := range invalid {
+		if err := ValidateName(n); err == nil {
+			t.Errorf("ValidateName(%s: %q) should have failed", label, n)
+		}
+	}
+}
+
+func TestRenameRejectsInvalidTargetName(t *testing.T) {
+	v := openTemp(t)
+	v.Put(newProfile("work", "acct-a"))
+	// A dash-prefixed name would be parsed as a flag by the CLI.
+	if err := v.Rename("work", "-f"); !errors.Is(err, ErrBadName) {
+		t.Errorf("expected ErrBadName, got %v", err)
+	}
+	if _, err := v.Get("work"); err != nil {
+		t.Error("the original profile must survive a rejected rename")
 	}
 }
 
