@@ -192,29 +192,31 @@ type listEntry struct {
 	Active       bool   `json:"active"`
 	ExpiresAt    string `json:"expiresAt,omitempty"`
 	Expired      bool   `json:"expired"`
+	ExpiryIsLive bool   `json:"expiryIsLive"`
 	LastUsedAt   string `json:"lastUsedAt,omitempty"`
 }
 
 func buildList(m *manager.Manager) ([]listEntry, manager.Status, error) {
-	st, err := m.Status()
+	views, st, err := m.Profiles()
 	if err != nil {
 		return nil, st, err
 	}
 	var out []listEntry
-	for _, p := range m.Vault.List() {
+	for _, v := range views {
 		e := listEntry{
-			Name:         p.Name,
-			Email:        p.EmailAddress,
-			Organization: p.OrganizationName,
-			Subscription: p.SubscriptionType(),
-			Active:       p.AccountUUID != "" && p.AccountUUID == st.AccountUUID,
+			Name:         v.Name,
+			Email:        v.EmailAddress,
+			Organization: v.OrganizationName,
+			Subscription: v.SubscriptionType(),
+			Active:       v.Active,
+			ExpiryIsLive: v.ExpiryIsLive,
 		}
-		if exp := p.ExpiresAt(); !exp.IsZero() {
-			e.ExpiresAt = exp.UTC().Format(time.RFC3339)
-			e.Expired = time.Now().After(exp)
+		if !v.ExpiresAt.IsZero() {
+			e.ExpiresAt = v.ExpiresAt.UTC().Format(time.RFC3339)
+			e.Expired = v.Expired()
 		}
-		if !p.LastUsedAt.IsZero() {
-			e.LastUsedAt = p.LastUsedAt.UTC().Format(time.RFC3339)
+		if !v.LastUsedAt.IsZero() {
+			e.LastUsedAt = v.LastUsedAt.UTC().Format(time.RFC3339)
 		}
 		out = append(out, e)
 	}
@@ -243,12 +245,18 @@ func cmdList(g globalOpts) error {
 		if e.Active {
 			marker = "*"
 		}
+		// An expired access token on a parked profile is the normal resting
+		// state, not a problem: Claude Code exchanges the refresh token for a
+		// new one on its next request. Only the active profile's expiry
+		// describes something live, so only that one is worth reporting.
 		note := ""
 		switch {
-		case e.Expired:
-			note = "  token expired (a /login may be needed)"
-		case e.ExpiresAt != "":
-			note = "  expires " + e.ExpiresAt
+		case e.ExpiryIsLive && e.Expired:
+			note = "  access token lapsed, Claude Code will refresh it"
+		case e.ExpiryIsLive:
+			note = "  token valid until " + e.ExpiresAt
+		case e.LastUsedAt != "":
+			note = "  last used " + e.LastUsedAt
 		}
 		fmt.Printf("%s %-16s %-32s %-8s%s\n", marker, e.Name, e.Email, e.Subscription, note)
 	}

@@ -5,7 +5,6 @@ import (
 	"os"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/MAbbasRaza/claude-code-credential-manager/internal/config"
 	"github.com/MAbbasRaza/claude-code-credential-manager/internal/manager"
@@ -108,8 +107,14 @@ func cmdDoctor(g globalOpts) error {
 		Sealer:   m.Vault.SealerName(),
 		Profiles: len(m.Vault.List()),
 	}
-	for _, p := range m.Vault.List() {
-		if exp := p.ExpiresAt(); !exp.IsZero() && time.Now().After(exp) {
+	// Live-aware, so the active profile is judged by the credentials Claude Code
+	// is actually using rather than by the snapshot taken at capture time.
+	views, _, err := m.Profiles()
+	if err != nil {
+		return err
+	}
+	for _, v := range views {
+		if v.Expired() {
 			rep.Vault.Expired++
 		}
 	}
@@ -127,11 +132,11 @@ func cmdDoctor(g globalOpts) error {
 		return rep.Duplicates[i].AccountUUID < rep.Duplicates[j].AccountUUID
 	})
 
-	if rep.Vault.Expired > 0 {
-		rep.Warnings = append(rep.Warnings, fmt.Sprintf(
-			"%d profile(s) hold an expired access token. ccm can still install them, but if the "+
-				"underlying login has also lapsed, Claude Code will ask for /login.", rep.Vault.Expired))
-	}
+	// Counted above but deliberately not warned about. A parked profile's access
+	// token is expected to be expired: it was captured at a moment in time and
+	// Claude Code exchanges the refresh token for a new one on its next request.
+	// The old warning reported a problem where there was none, and pointed at
+	// /login, which destroys the refresh token that makes the profile work.
 
 	if procs, err := proc.FindClaude(); err != nil {
 		rep.Warnings = append(rep.Warnings, "Could not enumerate processes: "+err.Error())

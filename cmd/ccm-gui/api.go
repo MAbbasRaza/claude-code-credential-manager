@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/webview/webview_go"
 
@@ -30,7 +29,12 @@ type Profile struct {
 	Plan         string `json:"plan"`
 	Active       bool   `json:"active"`
 	Expiry       string `json:"expiry"`
-	Expired      bool   `json:"expired"`
+	// Expired describes the access token only. For a parked profile this is
+	// the normal resting state rather than a problem.
+	Expired bool `json:"expired"`
+	// ExpiryIsLive is true when Expiry came from the credentials Claude Code is
+	// using right now, rather than the snapshot taken at capture time.
+	ExpiryIsLive bool   `json:"expiryIsLive"`
 	LastUsed     string `json:"lastUsed"`
 }
 
@@ -60,7 +64,7 @@ func (a *api) List() (Overview, error) {
 	if err != nil {
 		return Overview{}, err
 	}
-	st, err := m.Status()
+	views, st, err := m.Profiles()
 	if err != nil {
 		return Overview{}, err
 	}
@@ -86,20 +90,21 @@ func (a *api) List() (Overview, error) {
 		out.RunningError = err.Error()
 	}
 
-	for _, p := range m.Vault.List() {
+	for _, v := range views {
 		e := Profile{
-			Name:         p.Name,
-			Email:        p.EmailAddress,
-			Organization: p.OrganizationName,
-			Plan:         p.SubscriptionType(),
-			Active:       p.AccountUUID != "" && p.AccountUUID == st.AccountUUID,
+			Name:         v.Name,
+			Email:        v.EmailAddress,
+			Organization: v.OrganizationName,
+			Plan:         v.SubscriptionType(),
+			Active:       v.Active,
+			ExpiryIsLive: v.ExpiryIsLive,
 		}
-		if exp := p.ExpiresAt(); !exp.IsZero() {
-			e.Expiry = exp.Local().Format("2 Jan 2006, 15:04")
-			e.Expired = time.Now().After(exp)
+		if !v.ExpiresAt.IsZero() {
+			e.Expiry = v.ExpiresAt.Local().Format("2 Jan 2006, 15:04")
+			e.Expired = v.Expired()
 		}
-		if !p.LastUsedAt.IsZero() {
-			e.LastUsed = p.LastUsedAt.Local().Format("2 Jan 2006, 15:04")
+		if !v.LastUsedAt.IsZero() {
+			e.LastUsed = v.LastUsedAt.Local().Format("2 Jan 2006, 15:04")
 		}
 		out.Profiles = append(out.Profiles, e)
 	}

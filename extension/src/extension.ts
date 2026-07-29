@@ -109,6 +109,23 @@ interface ProfileItem extends vscode.QuickPickItem {
   profileName: string;
 }
 
+/**
+ * Describes a profile's token state, or nothing when there is nothing worth
+ * saying.
+ *
+ * Only the active profile's expiry reflects the credentials Claude Code is
+ * actually using. Every parked profile holds a snapshot taken at capture time,
+ * whose access token is expected to be expired, and reporting that as a problem
+ * previously told users to run /login, which would destroy the refresh token
+ * that makes the profile usable at all.
+ */
+function profileExpiryNote(p: ccm.Profile): string | undefined {
+  if (!p.expiryIsLive) {
+    return undefined;
+  }
+  return p.expired ? "access token lapsed, Claude Code will refresh it" : undefined;
+}
+
 async function switchAccount(): Promise<void> {
   let listed;
   try {
@@ -137,7 +154,7 @@ async function switchAccount(): Promise<void> {
     detail: [
       p.organization ? `org: ${p.organization}` : undefined,
       p.subscription ? `plan: ${p.subscription}` : undefined,
-      p.expired ? "access token expired (a /login may be needed)" : undefined
+      profileExpiryNote(p)
     ]
       .filter(Boolean)
       .join("   ")
@@ -255,7 +272,7 @@ async function manageAccounts(): Promise<void> {
     detail: [
       p.organization ? `org: ${p.organization}` : undefined,
       p.subscription ? `plan: ${p.subscription}` : undefined,
-      p.expired ? "access token expired" : undefined,
+      profileExpiryNote(p),
       p.active ? "currently active" : undefined
     ]
       .filter(Boolean)

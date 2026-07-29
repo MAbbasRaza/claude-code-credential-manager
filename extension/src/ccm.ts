@@ -15,7 +15,18 @@ export interface Profile {
   subscription?: string;
   active: boolean;
   expiresAt?: string;
+  /**
+   * Describes the access token only. For a parked profile an expired access
+   * token is the normal resting state: Claude Code exchanges the refresh token
+   * for a new one on its next request.
+   */
   expired: boolean;
+  /**
+   * True when expiresAt came from the credentials Claude Code is using right
+   * now rather than from the snapshot taken at capture time. Only a live
+   * expiry describes something worth reporting.
+   */
+  expiryIsLive: boolean;
   lastUsedAt?: string;
 }
 

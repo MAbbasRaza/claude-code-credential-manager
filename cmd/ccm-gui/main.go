@@ -44,6 +44,11 @@ func main() {
 	api := &api{win: w}
 	bind(w, api)
 
+	// Must come after SetSize, which is what actually realises the window on
+	// Windows; sending WM_SETICON to a handle that does not exist yet is a
+	// silent no-op.
+	applyWindowIcon(uintptr(w.Window()))
+
 	// The page is injected rather than served over a local port. A desktop app
 	// that opens a listening socket to draw its own window is a needless
 	// increase in attack surface for something holding OAuth credentials.

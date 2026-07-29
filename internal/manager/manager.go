@@ -119,6 +119,73 @@ func (m *Manager) Status() (Status, error) {
 	return st, nil
 }
 
+// ProfileView is a stored profile enriched with live state.
+//
+// It exists because the vault's copy of a profile is a snapshot taken at
+// capture time, and Claude Code refreshes the access token continuously
+// afterwards. For the account currently signed in, the live credentials are
+// authoritative and sitting right there, so reporting the snapshot's expiry
+// says "expired" about a token that is working fine.
+type ProfileView struct {
+	*vault.Profile
+
+	// Active reports whether this profile is the account Claude Code is
+	// currently using.
+	Active bool
+
+	// ExpiresAt is the live expiry for the active profile and the stored
+	// snapshot's expiry for the rest. Zero when unknown.
+	ExpiresAt time.Time
+
+	// ExpiryIsLive distinguishes the two, so callers can avoid presenting a
+	// snapshot as though it were current truth.
+	ExpiryIsLive bool
+}
+
+// Expired reports whether the access token this view describes has lapsed.
+//
+// For a parked profile this is expected rather than a problem: Claude Code
+// exchanges the refresh token for a new access token on its next request. Only
+// the refresh token lapsing requires a new sign-in, and nothing here can
+// determine that without attempting it.
+func (v ProfileView) Expired() bool {
+	return !v.ExpiresAt.IsZero() && time.Now().After(v.ExpiresAt)
+}
+
+// Profiles returns every stored profile with live state applied, alongside the
+// status it was computed from. Every surface renders from this so the CLI, the
+// tray, the desktop app and the extension cannot disagree.
+func (m *Manager) Profiles() ([]ProfileView, Status, error) {
+	st, err := m.Status()
+	if err != nil {
+		return nil, st, err
+	}
+
+	var live time.Time
+	if st.ExpiresAt != "" {
+		if t, err := time.Parse(time.RFC3339, st.ExpiresAt); err == nil {
+			live = t
+		}
+	}
+
+	stored := m.Vault.List()
+	out := make([]ProfileView, 0, len(stored))
+	for _, p := range stored {
+		v := ProfileView{
+			Profile: p,
+			Active:  p.AccountUUID != "" && p.AccountUUID == st.AccountUUID,
+		}
+		if v.Active && !live.IsZero() {
+			v.ExpiresAt = live
+			v.ExpiryIsLive = true
+		} else {
+			v.ExpiresAt = p.ExpiresAt()
+		}
+		out = append(out, v)
+	}
+	return out, st, nil
+}
+
 func (m *Manager) readConfigJSON() ([]byte, error) {
 	b, err := os.ReadFile(m.Paths.ConfigJSONPath)
 	if errors.Is(err, os.ErrNotExist) {

@@ -1,0 +1,10 @@
+/* Windows resource script for the desktop app.
+ *
+ * Compiled to rsrc_windows_amd64.syso by scripts/genrsrc.sh. Go links any
+ * .syso beside the package automatically, which is what gives the executable an
+ * icon in the taskbar, Alt-Tab and Explorer.
+ *
+ * Resource id 1 matters: the shell uses the lowest-numbered icon resource as
+ * the application icon.
+ */
+1 ICON "icon.ico"

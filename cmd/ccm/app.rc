@@ -1,0 +1,6 @@
+/* Windows resource script for the CLI. See cmd/ccm-gui/app.rc.
+ *
+ * A console program still gets an icon in Explorer, in the Start menu and on a
+ * pinned shortcut, so it is worth setting.
+ */
+1 ICON "icon.ico"

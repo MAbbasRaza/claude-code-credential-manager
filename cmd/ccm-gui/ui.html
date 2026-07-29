@@ -275,11 +275,20 @@ function renderList() {
 
   list.innerHTML = "";
   state.profiles.forEach((p) => {
+    // An expired access token on a parked profile is the normal resting state,
+    // not a warning: Claude Code exchanges the refresh token for a new one on
+    // its next request. Only the active profile's expiry describes something
+    // live, so only that one is reported.
     const meta = [];
     if (p.organization) meta.push(esc(p.organization));
     if (p.plan) meta.push(esc(p.plan));
-    if (p.expired) meta.push('<span class="warn">token expired</span>');
-    else if (p.expiry) meta.push("expires " + esc(p.expiry));
+    if (p.expiryIsLive && p.expired) {
+      meta.push('<span class="warn">access token lapsed, Claude Code will refresh it</span>');
+    } else if (p.expiryIsLive) {
+      meta.push("token valid until " + esc(p.expiry));
+    } else if (p.lastUsed) {
+      meta.push("last used " + esc(p.lastUsed));
+    }
 
     const card = document.createElement("div");
     card.className = "card" + (p.active ? " active" : "");

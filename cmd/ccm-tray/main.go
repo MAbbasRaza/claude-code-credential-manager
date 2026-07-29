@@ -31,6 +31,18 @@ func onReady() {
 	systray.SetTitle("ccm")
 	systray.SetTooltip("Claude Code account switcher")
 
+	// Left click opens the desktop app, right click keeps the menu, which is
+	// what a Windows user expects from a tray icon.
+	//
+	// Only wired when the app is actually installed. SetOnTapped replaces the
+	// default left-click behaviour rather than adding to it, and the function
+	// that shows the menu is unexported, so setting this without the app
+	// present would leave left click doing nothing at all.
+	if guiPath() != "" {
+		systray.SetOnTapped(openGUI)
+		systray.SetTooltip("Claude Code account switcher\nClick to manage accounts")
+	}
+
 	rebuild()
 }
 

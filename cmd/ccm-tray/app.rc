@@ -1,0 +1,7 @@
+/* Windows resource script for the tray app. See cmd/ccm-gui/app.rc.
+ *
+ * The tray icon itself is set at runtime from internal/icon; this is the
+ * executable's own icon, which is a separate thing and shows in Task Manager,
+ * Alt-Tab and Explorer.
+ */
+1 ICON "icon.ico"
