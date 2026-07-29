@@ -3,6 +3,12 @@
 /dist/
 *.exe
 
+# Bare-named build output. A Linux or macOS build writes an extensionless
+# binary into the repo root, which *.exe does not catch.
+/ccm
+/ccm-tray
+/ccm-gui
+
 # Extension build output
 extension/node_modules/
 extension/out/
