@@ -115,6 +115,26 @@ jobs:
       # push rather than only at tag time, because a cgo cross-compile can fail
       # for reasons a native build never reveals, and discovering it during a
       # release is discovering it too late.
+      # The Keychain-dependent tests skip rather than fail when the login
+      # keychain is locked, which is correct for a developer over SSH but means
+      # a plain "ok" no longer distinguishes "exercised" from "skipped". This
+      # runner is the one place the macOS backend is actually proven, so if it
+      # ever starts skipping, that coverage disappears silently. Fail instead.
+      - name: Keychain paths must run here, not skip
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -o pipefail
+          go test ./internal/store/ ./internal/vault/ -count=1 -v \
+            -run 'Keychain|SaveAndReopenRoundTrip|EnvelopeRecordsTheSealer' \
+            | tee /tmp/keychain.log
+          if grep -q -- '--- SKIP' /tmp/keychain.log; then
+            echo "::error::Keychain tests skipped on the macOS runner, so the macOS backend is no longer covered anywhere"
+            grep -- '--- SKIP' /tmp/keychain.log
+            exit 1
+          fi
+          echo "Keychain paths were exercised, not skipped."
+
       - name: Cross-compile for Intel Macs
         if: runner.os == 'macOS'
         env:
