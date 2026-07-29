@@ -7,7 +7,9 @@ import (
 
 	"github.com/webview/webview_go"
 
+	"github.com/MAbbasRaza/claude-code-credential-manager/internal/autostart"
 	"github.com/MAbbasRaza/claude-code-credential-manager/internal/config"
+	"github.com/MAbbasRaza/claude-code-credential-manager/internal/locate"
 	"github.com/MAbbasRaza/claude-code-credential-manager/internal/manager"
 	"github.com/MAbbasRaza/claude-code-credential-manager/internal/proc"
 )
@@ -277,6 +279,13 @@ type Settings struct {
 	CredentialsBackend    string `json:"credentialsBackend"`
 	RequireClosedSessions bool   `json:"requireClosedSessions"`
 	SettingsPath          string `json:"settingsPath"`
+
+	// Autostart is not part of the settings file. It lives in the platform's
+	// own login mechanism, so it is read from there each time rather than
+	// mirrored, which would let the two drift apart.
+	Autostart          bool   `json:"autostart"`
+	AutostartAvailable bool   `json:"autostartAvailable"`
+	AutostartMechanism string `json:"autostartMechanism"`
 }
 
 func (a *api) SettingsGet() (Settings, error) {
@@ -288,12 +297,46 @@ func (a *api) SettingsGet() (Settings, error) {
 	if backend == "" {
 		backend = "auto"
 	}
+	// A failure to read the login mechanism is reported as "off" rather than
+	// failing the whole settings dialog, since everything else in it is still
+	// usable and the checkbox will simply show unticked.
+	on, _ := autostart.IsEnabled(autostartName)
+
 	return Settings{
 		ClaudeConfigDir:       s.ClaudeConfigDir,
 		CredentialsBackend:    backend,
 		RequireClosedSessions: s.ShouldRequireClosedSessions(),
 		SettingsPath:          s.Path(),
+
+		Autostart:          on,
+		AutostartAvailable: locate.Executable(locate.Tray) != "",
+		AutostartMechanism: autostart.Mechanism(),
 	}, nil
+}
+
+// autostartName must match what the CLI registers, or the two would each
+// believe the other had not set it.
+const autostartName = "ccm-tray"
+
+// AutostartSet turns start-at-login on or off.
+//
+// Separate from SettingsSet because it writes to the platform's login
+// mechanism rather than the settings file, and because it can fail on its own
+// terms, for instance when the tray app is not installed.
+func (a *api) AutostartSet(enabled bool) error {
+	if !enabled {
+		return autostart.Disable(autostartName)
+	}
+
+	exe := locate.Executable(locate.Tray)
+	if exe == "" {
+		return errors.New("the tray app is not installed, so there is nothing to start at login")
+	}
+	return autostart.Enable(autostart.Entry{
+		Name:        autostartName,
+		DisplayName: "Claude Code Accounts",
+		Exec:        exe,
+	})
 }
 
 func (a *api) SettingsSet(dir, backend string, requireClosed bool) error {

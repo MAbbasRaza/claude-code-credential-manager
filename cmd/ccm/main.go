@@ -100,6 +100,8 @@ func run(args []string) error {
 		return cmdStatus(g)
 	case "config":
 		return cmdConfig(g, rest[1:])
+	case "autostart":
+		return cmdAutostart(g, rest[1:])
 	case "doctor":
 		return cmdDoctor(g)
 	default:
@@ -122,6 +124,8 @@ USAGE
   ccm rm <profile>               remove a profile
   ccm status                     show the active account
   ccm config get|set|path        read or change ccm's own settings
+  ccm autostart status|enable|disable
+                                 start the tray app when you log in
   ccm doctor                     diagnose path resolution and vault health
 
 FLAGS

@@ -16,6 +16,7 @@ import (
 
 	"fyne.io/systray"
 
+	"github.com/MAbbasRaza/claude-code-credential-manager/internal/autostart"
 	"github.com/MAbbasRaza/claude-code-credential-manager/internal/icon"
 	"github.com/MAbbasRaza/claude-code-credential-manager/internal/manager"
 )
@@ -116,6 +117,14 @@ func rebuild() {
 		go onClick(manage.ClickedCh, openGUI)
 	}
 
+	// A checkbox rather than a plain item, so the current state is visible
+	// without opening anything else.
+	if self, err := os.Executable(); err == nil {
+		on, _ := autostart.IsEnabled(autostartName)
+		boot := systray.AddMenuItemCheckbox("Start at login", "Run the tray app when you log in", on)
+		go onClick(boot.ClickedCh, func() { toggleAutostart(self, boot) })
+	}
+
 	refresh := systray.AddMenuItem("Refresh", "Re-read profiles and active account")
 	go onClick(refresh.ClickedCh, rebuild)
 
@@ -199,6 +208,46 @@ func openGUI() {
 	}
 	if err := exec.Command(path).Start(); err != nil {
 		notify("ccm could not open the manager", firstLine(err.Error()))
+	}
+}
+
+// autostartName must match what the CLI and the desktop app use, or each would
+// believe the others had not set it.
+const autostartName = "ccm-tray"
+
+// toggleAutostart flips start-at-login and reports the outcome.
+//
+// The checkbox is set from the mechanism's own state afterwards rather than
+// assumed, so a write that failed leaves the tick where it really is instead of
+// where the click implied.
+func toggleAutostart(self string, item *systray.MenuItem) {
+	on, err := autostart.IsEnabled(autostartName)
+	if err != nil {
+		notify("ccm", "Could not read the login setting: "+firstLine(err.Error()))
+		return
+	}
+
+	if on {
+		err = autostart.Disable(autostartName)
+	} else {
+		err = autostart.Enable(autostart.Entry{
+			Name:        autostartName,
+			DisplayName: "Claude Code Accounts",
+			Exec:        self,
+		})
+	}
+	if err != nil {
+		notify("ccm could not change the login setting", firstLine(err.Error()))
+	}
+
+	if nowOn, e := autostart.IsEnabled(autostartName); e == nil {
+		if nowOn {
+			item.Check()
+			notify("Start at login enabled", "The tray app will start when you log in.")
+		} else {
+			item.Uncheck()
+			notify("Start at login disabled", "The tray app will no longer start automatically.")
+		}
 	}
 }
 

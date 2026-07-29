@@ -449,18 +449,32 @@ async function showSettings() {
     "unreachable.</div>" +
     '<label><input type="checkbox" id="s-guard" style="width:auto;margin-right:8px">' +
     "Refuse to switch while Claude Code is running</label>" +
+    '<label><input type="checkbox" id="s-boot" style="width:auto;margin-right:8px"' +
+    (s.autostartAvailable ? "" : " disabled") + ">Start the tray app when I log in</label>" +
+    '<div class="hint">' +
+    (s.autostartAvailable
+      ? "Registered with " + esc(s.autostartMechanism) + "."
+      : "Unavailable: the tray app is not installed, so there would be nothing to start.") +
+    "</div>" +
     '<div class="hint">' + esc(s.settingsPath) + "</div>",
     [
       { label: "Cancel", onClick: closeModal },
       { label: "Save", kind: "primary", onClick: async () => {
           try {
             await window.goSettingsSet($("s-dir").value, $("s-backend").value, $("s-guard").checked);
+            // Applied separately: it writes to the platform's login mechanism
+            // rather than the settings file, and only when actually changed, so
+            // saving other settings never rewrites a login registration.
+            if ($("s-boot").checked !== s.autostart) {
+              await window.goAutostartSet($("s-boot").checked);
+            }
           } catch (e) { modalError(errText(e)); return; }
           closeModal(); await refresh(); toast("Settings saved");
         } }
     ]);
   $("s-backend").value = s.credentialsBackend;
   $("s-guard").checked = s.requireClosedSessions;
+  $("s-boot").checked = s.autostart;
 }
 
 /* ---------------- wiring ---------------- */

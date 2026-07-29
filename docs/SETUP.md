@@ -168,9 +168,22 @@ switch. Failures, including the running-Claude-Code refusal, appear as desktop n
 
 To start it automatically:
 
-- **Windows** — press `Win+R`, enter `shell:startup`, and put a shortcut to `ccm-tray.exe` there.
-- **macOS** — System Settings → General → Login Items → add `ccm-tray`.
-- **Linux** — add a `.desktop` entry in `~/.config/autostart/`.
+```bash
+ccm autostart enable      # or: disable, status
+```
+
+The Windows installer ticks this by default; you can untick it during setup, or change it later
+from the tray menu, the desktop app's Settings, or the command above. It registers with whichever
+mechanism your system uses, all per-user and none needing administrator rights:
+
+| Platform | Mechanism |
+|---|---|
+| Windows | `HKCU\…\CurrentVersion\Run` |
+| macOS | LaunchAgent in `~/Library/LaunchAgents` |
+| Linux | XDG entry in `~/.config/autostart` |
+
+`ccm autostart status` prints which one is in use and where the entry lives, so you can remove it
+by hand if you prefer.
 
 The tray app needs cgo, so prebuilt binaries ship only for linux/amd64, darwin/arm64 and
 windows/amd64. On other platforms, build it from source.

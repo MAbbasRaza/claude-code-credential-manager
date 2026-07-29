@@ -74,4 +74,5 @@ func bind(w webview.WebView, a *api) {
 	must("goDoctor", a.Doctor)
 	must("goSettingsGet", a.SettingsGet)
 	must("goSettingsSet", a.SettingsSet)
+	must("goAutostartSet", a.AutostartSet)
 }
