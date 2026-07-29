@@ -34,6 +34,26 @@ func newKeychainStore() (Store, error) {
 	return &KeychainStore{Service: config.KeychainService, Account: acct}, nil
 }
 
+// keychainErr explains a locked login keychain instead of surfacing "exit
+// status 36".
+//
+// The same condition that blocks the vault key blocks the credentials item, so
+// the two report it the same way, differing only in which override resolves it.
+// Confirmed on a 2018 Intel Mac over SSH, where /usr/bin/security refuses with
+// errSecInteractionNotAllowed rather than prompting.
+func keychainErr(op string, err error, stderr string) error {
+	msg := strings.TrimSpace(stderr)
+	if strings.Contains(msg, "User interaction is not allowed") {
+		return fmt.Errorf("%s: the macOS login keychain is locked for this session, "+
+			"which is normal over SSH or in a LaunchAgent that starts before login. "+
+			"Run ccm from a graphical login session, or unlock it first with "+
+			"`security unlock-keychain`, or set %s=file if Claude Code on this machine "+
+			"keeps its credentials in ~/.claude/.credentials.json: %w: %s",
+			op, config.EnvCredentialsBackend, err, msg)
+	}
+	return fmt.Errorf("%s: %w: %s", op, err, msg)
+}
+
 func (k *KeychainStore) LoadBlob() ([]byte, error) {
 	cmd := exec.Command("security", "find-generic-password",
 		"-s", k.Service, "-a", k.Account, "-w")
@@ -46,8 +66,8 @@ func (k *KeychainStore) LoadBlob() ([]byte, error) {
 		if strings.Contains(errb.String(), "could not be found") {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("keychain read (%s/%s): %w: %s",
-			k.Service, k.Account, err, strings.TrimSpace(errb.String()))
+		return nil, keychainErr(fmt.Sprintf("keychain read (%s/%s)", k.Service, k.Account),
+			err, errb.String())
 	}
 	return bytes.TrimRight(out.Bytes(), "\n"), nil
 }
@@ -61,8 +81,8 @@ func (k *KeychainStore) SaveBlob(b []byte) error {
 	var errb bytes.Buffer
 	cmd.Stderr = &errb
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("keychain write (%s/%s): %w: %s",
-			k.Service, k.Account, err, strings.TrimSpace(errb.String()))
+		return keychainErr(fmt.Sprintf("keychain write (%s/%s)", k.Service, k.Account),
+			err, errb.String())
 	}
 	return nil
 }

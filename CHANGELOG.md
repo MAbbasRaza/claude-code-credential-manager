@@ -4,6 +4,47 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **`ccm` could not run at all on macOS from a session without an unlocked login keychain.** The
+  vault's data key lives in the Keychain, and `loadKey` is called by both seal and unseal, so
+  every operation failed with `exit status 36` and nothing more. That covers every SSH session,
+  every LaunchAgent started before login, and any tmux pane whose keychain has since relocked.
+  Found by running the suite on a 2018 Intel Mac, where 21 tests failed this way; GitHub's macOS
+  runner has an unlocked keychain and had never shown it. The credentials store already had an
+  escape hatch for this exact situation, but the vault had none.
+- Both Keychain paths now explain a locked keychain and name the ways out, instead of surfacing
+  a bare exit code.
+- `internal/manager` tests discarded the error from `Open` in twenty places, so any failure became
+  a nil-pointer dereference inside whichever method ran next. That panic aborts the whole package,
+  hiding every other test's result behind a stack trace that does not mention the cause.
+
+### Added
+
+- `CCM_VAULT_BACKEND`, the sealing counterpart to `CCM_CREDENTIALS_BACKEND`. On macOS, `file`
+  keeps the vault as a 0600 file rather than AES-256-GCM under a Keychain key. It is opt-in, never
+  an automatic fallback: falling back on its own would quietly downgrade a file full of refresh
+  tokens. Windows refuses it, because DPAPI works in every session and the downgrade would buy
+  nothing. Changing backends cannot corrupt a vault; the envelope already records which scheme
+  wrote it and `ccm` refuses a mismatch rather than guessing.
+- Keychain-dependent tests now skip with the reason when the keychain is unreachable, rather than
+  failing and misreporting a working backend as broken.
+- CI cross-compiles both cgo programs for Intel Macs on every push and asserts with `file(1)` that
+  the output really is `x86_64`, since an ignored `-arch` flag would produce arm64 binaries under
+  an amd64 name and still exit 0.
+
+### Verified
+
+- Full suite, including the race detector, on a 2018 Intel Mac (macOS 15.7.7, `go1.26.5
+  darwin/amd64`): green.
+- A real two-account switch on that machine against synthetic fixtures: the `mcpOAuth` subtree came
+  back byte-identical, both case-differing project keys survived, all other `.claude.json` state
+  was unchanged, and capture-on-switch parked the outgoing account's rotated refresh token.
+- LaunchAgent autostart on that machine: the plist passes `plutil -lint`, points at a real
+  executable, and `disable` removes it completely.
+
 ## [0.2.1] - 2026-07-29
 
 ### Fixed

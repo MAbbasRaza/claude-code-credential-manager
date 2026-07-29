@@ -135,8 +135,20 @@ writes a synthetic `.credentials.json` passes on Windows and Linux but fails on 
 manager reads the Keychain and never sees the file. The first CI run on macOS failed for exactly
 this reason.
 
-Contributions that can only be tested on one platform are welcome, but say so in the PR. macOS
-verification is especially valuable; the original author could only test on Windows.
+**Tests that save a vault must force `CCM_VAULT_BACKEND=file` on macOS, and only on macOS.** The
+vault key lives in the login keychain, and macOS keeps that locked for any session that did not
+log in through the GUI. GitHub's macOS runner has an unlocked keychain, so CI hid this completely:
+the suite passed there while twenty-one tests failed on a real Mac over SSH with
+`errSecInteractionNotAllowed`. Do not force it on Windows or Linux, where DPAPI and the 0600 file
+both work headless; forcing it there would stop those platforms testing the scheme they ship, and
+Windows refuses the value outright.
+
+Tests for the Keychain paths themselves *skip* rather than fail when the keychain is unreachable
+(`skipIfKeychainLocked` in `internal/store`, `skipIfSealerUnavailable` in `internal/vault`). That
+keeps a locked session honest instead of reporting a working backend as broken. It also means a
+green run on a headless machine has not exercised the Keychain: check the skip lines.
+
+Contributions that can only be tested on one platform are welcome, but say so in the PR.
 
 ## Reporting bugs
 

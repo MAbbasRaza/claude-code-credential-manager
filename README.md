@@ -246,6 +246,33 @@ CCM_CREDENTIALS_BACKEND=file ccm use work
 
 Valid values are `auto` (default, the platform's normal store), `file`, and `keychain`.
 
+`ccm`'s own vault has the same problem for the same reason: on macOS it is encrypted under a key
+that also lives in the login keychain, so a session that cannot reach the keychain cannot read or
+write the vault either. If you see this:
+
+```text
+the macOS login keychain is locked for this session, which is normal over SSH or in a
+LaunchAgent that starts before login
+```
+
+either unlock it first with `security unlock-keychain`, run `ccm` from a graphical login session,
+or accept a weaker vault:
+
+```bash
+CCM_VAULT_BACKEND=file ccm list
+```
+
+That stores the vault as a plain file with mode `0600`, exactly what `ccm` does on Linux, instead
+of AES-256-GCM. It is opt-in rather than an automatic fallback because it is a downgrade, and
+silently weakening a file full of refresh tokens is not a decision `ccm` should make for you.
+Switching backends never risks the vault: the envelope records which scheme wrote it, and `ccm`
+refuses to open a vault sealed under a different one rather than guessing.
+
+Valid values are `auto` (default), `keychain` and `file` on macOS; `auto` and `file` on Linux,
+where they mean the same thing; and `auto` or `dpapi` on Windows, which has nothing to escape from
+because DPAPI works in every session. An unrecognised value is rejected rather than ignored, so a
+typo cannot leave you believing the vault is sealed one way while it is sealed another.
+
 ## Where your tokens are stored
 
 **The vault is never less protected than Claude Code's own credential store on the same

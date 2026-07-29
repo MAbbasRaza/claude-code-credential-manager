@@ -3,6 +3,7 @@
 package store
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -24,22 +25,62 @@ func testKeychainStore(t *testing.T) *KeychainStore {
 	if _, err := exec.LookPath("security"); err != nil {
 		t.Skip("the security command is unavailable")
 	}
+	skipIfKeychainLocked(t)
 
-	acct := os.Getenv("USER")
-	if acct == "" {
-		acct = "ccm-test"
-	}
 	svc := fmt.Sprintf("ccm-test-%d-%d", os.Getpid(), time.Now().UnixNano())
-
 	if svc == config.KeychainService {
 		t.Fatal("refusing to run against the real Claude Code keychain item")
 	}
 
+	acct := keychainTestAccount()
 	k := &KeychainStore{Service: svc, Account: acct}
 	t.Cleanup(func() {
 		_ = exec.Command("security", "delete-generic-password", "-s", svc, "-a", acct).Run()
 	})
 	return k
+}
+
+func keychainTestAccount() string {
+	if acct := os.Getenv("USER"); acct != "" {
+		return acct
+	}
+	return "ccm-test"
+}
+
+// skipIfKeychainLocked skips when this session cannot write to the login
+// keychain at all.
+//
+// macOS keeps it locked for any session that did not log in through the GUI, so
+// these tests cannot run over SSH, in a LaunchAgent that starts before login,
+// or on a headless runner. Failing there would misreport a working backend as
+// broken: confirmed on a 2018 Intel Mac, where /usr/bin/security exits 36 with
+// errSecInteractionNotAllowed for every write, while the identical flags
+// succeed against an unlocked keychain.
+//
+// The probe uses its own throwaway service name and removes it, so it cannot
+// disturb the never-signed-in assertion the round-trip test makes first.
+func skipIfKeychainLocked(t *testing.T) {
+	t.Helper()
+
+	acct := keychainTestAccount()
+	svc := fmt.Sprintf("ccm-probe-%d-%d", os.Getpid(), time.Now().UnixNano())
+
+	cmd := exec.Command("security", "add-generic-password",
+		"-U", "-s", svc, "-a", acct, "-w", "probe")
+	var errb bytes.Buffer
+	cmd.Stderr = &errb
+	err := cmd.Run()
+	_ = exec.Command("security", "delete-generic-password", "-s", svc, "-a", acct).Run()
+
+	if err == nil {
+		return
+	}
+	msg := strings.TrimSpace(errb.String())
+	if strings.Contains(msg, "User interaction is not allowed") {
+		t.Skipf("the macOS login keychain is locked for this session, which is normal "+
+			"over SSH or on a headless runner: %s", msg)
+	}
+	t.Fatalf("keychain probe failed for an unexpected reason: %v: %s", err, msg)
 }
 
 // The macOS backend was written without a Mac to test on. This is the only
@@ -118,8 +159,10 @@ func TestKeychainStoreHandlesJSONPunctuation(t *testing.T) {
 	}
 }
 
+// Built directly rather than through testKeychainStore so it still runs in a
+// session with no usable keychain; Describe only formats fields.
 func TestKeychainStoreDescribe(t *testing.T) {
-	k := testKeychainStore(t)
+	k := &KeychainStore{Service: "ccm-test-describe", Account: "someone"}
 	d := k.Describe()
 	if !strings.Contains(d, k.Service) {
 		t.Errorf("Describe should name the service, got %q", d)

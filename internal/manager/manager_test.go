@@ -3,6 +3,7 @@ package manager
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -69,6 +70,19 @@ func newEnv(t *testing.T) (claudeDir string) {
 	// exactly that.
 	t.Setenv("CCM_CREDENTIALS_BACKEND", "file")
 
+	// Likewise for the vault's own sealing, but only on macOS, which is the one
+	// platform whose default sealer can be unavailable: the vault key lives in
+	// the login keychain, and that is locked in any session that did not log in
+	// through the GUI. Left on the default, every test here failed on a real Mac
+	// over SSH with errSecInteractionNotAllowed while passing on GitHub's macOS
+	// runner. Windows DPAPI and the Linux 0600 file both work in every session
+	// and are left alone, so those platforms keep testing what they ship. The
+	// Keychain sealer itself is covered in internal/vault, where it skips rather
+	// than fails when unavailable.
+	if runtime.GOOS == "darwin" {
+		t.Setenv("CCM_VAULT_BACKEND", "file")
+	}
+
 	// Real Claude Code processes are almost certainly running on a developer
 	// machine, and that check is not what these tests exercise.
 	settings := `{"claudeConfigDir":` + quote(claudeDir) + `,"requireClosedSessions":false}`
@@ -76,6 +90,22 @@ func newEnv(t *testing.T) (claudeDir string) {
 		t.Fatal(err)
 	}
 	return claudeDir
+}
+
+// mustOpen opens a manager or fails the test with the real reason.
+//
+// Discarding the error instead turned any Open failure into a nil-pointer
+// dereference several lines later, inside whichever method was called first.
+// That panic aborts the entire package run, so one broken precondition hid the
+// results of every other test in the file and reported a stack trace rather
+// than the error that caused it.
+func mustOpen(t *testing.T) *Manager {
+	t.Helper()
+	m, err := Open("")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	return m
 }
 
 // homeDirFor reports the CCM_HOME newEnv installed, for tests that need to
@@ -219,7 +249,7 @@ func TestCaptureOnSwitchPicksUpBackgroundRefresh(t *testing.T) {
 	}
 
 	writeLive(t, dir, credsDoc("B-ACCESS", "B-REFRESH"), configDoc("acct-b", "b@example.invalid"))
-	m2, _ := Open("")
+	m2 := mustOpen(t)
 	if _, err := m2.Capture("personal"); err != nil {
 		t.Fatal(err)
 	}
@@ -228,13 +258,13 @@ func TestCaptureOnSwitchPicksUpBackgroundRefresh(t *testing.T) {
 	// "personal" is now stale, holding a refresh token the server has rotated.
 	writeLive(t, dir, credsDoc("B-ACCESS-V2", "B-REFRESH-V2"), configDoc("acct-b", "b@example.invalid"))
 
-	m3, _ := Open("")
+	m3 := mustOpen(t)
 	if _, err := m3.Switch("work", false); err != nil {
 		t.Fatalf("switch to work: %v", err)
 	}
 
 	// Switching away must have re-read B's live tokens into "personal".
-	m4, _ := Open("")
+	m4 := mustOpen(t)
 	p, err := m4.Vault.Get("personal")
 	if err != nil {
 		t.Fatalf("get personal: %v", err)
@@ -288,7 +318,7 @@ func TestCaptureUnderSameNameRefreshesInPlace(t *testing.T) {
 	dir := newEnv(t)
 	writeLive(t, dir, credsDoc("A-ACCESS", "A-REFRESH"), configDoc("acct-a", "a@example.invalid"))
 
-	m, _ := Open("")
+	m := mustOpen(t)
 	first, err := m.Capture("work")
 	if err != nil {
 		t.Fatal(err)
@@ -298,7 +328,7 @@ func TestCaptureUnderSameNameRefreshesInPlace(t *testing.T) {
 	// Claude Code rotates the token, then the user re-runs `ccm add work`.
 	writeLive(t, dir, credsDoc("A-ACCESS-V2", "A-REFRESH-V2"), configDoc("acct-a", "a@example.invalid"))
 
-	m2, _ := Open("")
+	m2 := mustOpen(t)
 	second, err := m2.Capture("work")
 	if err != nil {
 		t.Fatalf("re-capturing under the same name should refresh, not fail: %v", err)
@@ -320,12 +350,12 @@ func TestCaptureWithoutNameRefreshesExistingProfile(t *testing.T) {
 	dir := newEnv(t)
 	writeLive(t, dir, credsDoc("A-ACCESS", "A-REFRESH"), configDoc("acct-a", "a@example.invalid"))
 
-	m, _ := Open("")
+	m := mustOpen(t)
 	if _, err := m.Capture("work"); err != nil {
 		t.Fatal(err)
 	}
 
-	m2, _ := Open("")
+	m2 := mustOpen(t)
 	p, err := m2.Capture("")
 	if err != nil {
 		t.Fatalf("unnamed capture of a known account: %v", err)
@@ -343,19 +373,19 @@ func TestCaptureWithoutNameRefreshesExistingProfile(t *testing.T) {
 func TestCaptureRefusesToOverwriteADifferentAccount(t *testing.T) {
 	dir := newEnv(t)
 	writeLive(t, dir, credsDoc("A-ACCESS", "A-REFRESH"), configDoc("acct-a", "a@example.invalid"))
-	m, _ := Open("")
+	m := mustOpen(t)
 	if _, err := m.Capture("shared"); err != nil {
 		t.Fatal(err)
 	}
 
 	writeLive(t, dir, credsDoc("B-ACCESS", "B-REFRESH"), configDoc("acct-b", "b@example.invalid"))
-	m2, _ := Open("")
+	m2 := mustOpen(t)
 	if _, err := m2.Capture("shared"); err == nil {
 		t.Fatal("expected reusing a name held by another account to be refused")
 	}
 
 	// Account A's tokens must still be intact.
-	m3, _ := Open("")
+	m3 := mustOpen(t)
 	p, err := m3.Vault.Get("shared")
 	if err != nil {
 		t.Fatal(err)
@@ -370,17 +400,17 @@ func TestCaptureRefusesToOverwriteADifferentAccount(t *testing.T) {
 func TestExactlyOneProfileIsActive(t *testing.T) {
 	dir := newEnv(t)
 	writeLive(t, dir, credsDoc("A-ACCESS", "A-REFRESH"), configDoc("acct-a", "a@example.invalid"))
-	m, _ := Open("")
+	m := mustOpen(t)
 	if _, err := m.Capture("work"); err != nil {
 		t.Fatal(err)
 	}
 	writeLive(t, dir, credsDoc("B-ACCESS", "B-REFRESH"), configDoc("acct-b", "b@example.invalid"))
-	m2, _ := Open("")
+	m2 := mustOpen(t)
 	if _, err := m2.Capture("personal"); err != nil {
 		t.Fatal(err)
 	}
 
-	m3, _ := Open("")
+	m3 := mustOpen(t)
 	st, err := m3.Status()
 	if err != nil {
 		t.Fatal(err)
@@ -414,14 +444,14 @@ func TestRenamedProfileStillSwitches(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	m2, _ := Open("")
+	m2 := mustOpen(t)
 	if err := m2.Rename("work", "day-job"); err != nil {
 		t.Fatalf("Rename: %v", err)
 	}
 
 	// Sign in as a different account, then switch back using the new name.
 	writeLive(t, dir, credsDoc("B-ACCESS", "B-REFRESH"), configDoc("acct-b", "b@example.invalid"))
-	m3, _ := Open("")
+	m3 := mustOpen(t)
 	if _, err := m3.Switch("day-job", false); err != nil {
 		t.Fatalf("switching to the renamed profile: %v", err)
 	}
@@ -441,7 +471,7 @@ func TestCaptureOnSwitchFollowsARename(t *testing.T) {
 	dir := newEnv(t)
 
 	writeLive(t, dir, credsDoc("A-ACCESS", "A-REFRESH"), configDoc("acct-a", "a@example.invalid"))
-	m, _ := Open("")
+	m := mustOpen(t)
 	if _, err := m.Capture("work"); err != nil {
 		t.Fatal(err)
 	}
@@ -450,19 +480,19 @@ func TestCaptureOnSwitchFollowsARename(t *testing.T) {
 	}
 
 	writeLive(t, dir, credsDoc("B-ACCESS", "B-REFRESH"), configDoc("acct-b", "b@example.invalid"))
-	m2, _ := Open("")
+	m2 := mustOpen(t)
 	if _, err := m2.Capture("personal"); err != nil {
 		t.Fatal(err)
 	}
 
 	// Account A signs back in and its token rotates, then we switch away.
 	writeLive(t, dir, credsDoc("A-ACCESS-V2", "A-REFRESH-V2"), configDoc("acct-a", "a@example.invalid"))
-	m3, _ := Open("")
+	m3 := mustOpen(t)
 	if _, err := m3.Switch("personal", false); err != nil {
 		t.Fatalf("switch: %v", err)
 	}
 
-	m4, _ := Open("")
+	m4 := mustOpen(t)
 	if n := len(m4.Vault.List()); n != 2 {
 		t.Errorf("vault holds %d profiles, want 2; a rename should not spawn a duplicate", n)
 	}
@@ -516,13 +546,13 @@ func TestBackupIsWrittenBeforeSwitch(t *testing.T) {
 	dir := newEnv(t)
 	writeLive(t, dir, credsDoc("A-ACCESS", "A-REFRESH"), configDoc("acct-a", "a@example.invalid"))
 
-	m, _ := Open("")
+	m := mustOpen(t)
 	if _, err := m.Capture("work"); err != nil {
 		t.Fatal(err)
 	}
 	writeLive(t, dir, credsDoc("B-ACCESS", "B-REFRESH"), configDoc("acct-b", "b@example.invalid"))
 
-	m2, _ := Open("")
+	m2 := mustOpen(t)
 	res, err := m2.Switch("work", false)
 	if err != nil {
 		t.Fatal(err)
@@ -550,12 +580,12 @@ func TestStatusReportsActiveProfile(t *testing.T) {
 	dir := newEnv(t)
 	writeLive(t, dir, credsDoc("A-ACCESS", "A-REFRESH"), configDoc("acct-a", "a@example.invalid"))
 
-	m, _ := Open("")
+	m := mustOpen(t)
 	if _, err := m.Capture("work"); err != nil {
 		t.Fatal(err)
 	}
 
-	m2, _ := Open("")
+	m2 := mustOpen(t)
 	st, err := m2.Status()
 	if err != nil {
 		t.Fatal(err)

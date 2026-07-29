@@ -53,7 +53,20 @@ func (b dataBlob) free() {
 // vault to the current user account via DPAPI is strictly stronger than what
 // it protects. It also means the vault cannot be read by another user on the
 // same machine, and cannot be copied to a different machine.
-func NewSealer() Sealer { return dpapiSealer{} }
+//
+// Unlike macOS, there is nothing to escape from: DPAPI needs no unlocked store
+// and works in every session, including services and scheduled tasks. A "file"
+// setting here would therefore be a pure downgrade bought for nothing, so it is
+// refused rather than honoured.
+func NewSealer() (Sealer, error) {
+	switch pref := vaultBackendPref(); pref {
+	case "", "dpapi":
+		return dpapiSealer{}, nil
+	default:
+		return nil, fmt.Errorf("%w %q: DPAPI is available in every Windows session, "+
+			"so ccm offers no weaker vault here (valid: auto, dpapi)", ErrBadVaultBackend, pref)
+	}
+}
 
 type dpapiSealer struct{}
 

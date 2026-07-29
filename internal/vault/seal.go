@@ -1,5 +1,31 @@
 package vault
 
+import (
+	"errors"
+	"os"
+	"strings"
+
+	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/config"
+)
+
+// ErrBadVaultBackend reports an unusable CCM_VAULT_BACKEND value.
+//
+// An unrecognised value is refused rather than ignored. Silently falling back
+// to the default would mean a user who typed "keychan" believed their vault was
+// sealed one way while it was sealed another, and the envelope check would then
+// surface it much later as an unreadable vault.
+var ErrBadVaultBackend = errors.New("unknown vault backend")
+
+// vaultBackendPref reads and normalises CCM_VAULT_BACKEND. Both "" and "auto"
+// mean "use the platform default", and are returned as "".
+func vaultBackendPref() string {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv(config.EnvVaultBackend)))
+	if v == "auto" {
+		return ""
+	}
+	return v
+}
+
 // Sealer protects the vault at rest.
 //
 // Implementations are chosen per platform by NewSealer so the vault is never

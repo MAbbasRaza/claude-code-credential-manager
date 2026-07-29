@@ -56,6 +56,20 @@ const EnvCCMConfigDir = "CCM_CLAUDE_CONFIG_DIR"
 // logic on macOS without touching a developer's actual Keychain.
 const EnvCredentialsBackend = "CCM_CREDENTIALS_BACKEND"
 
+// EnvVaultBackend forces how ccm's own vault is protected at rest, overriding
+// the per-platform default. Values: "auto" (default), plus whichever schemes
+// the platform allows.
+//
+// This is the sealing counterpart to EnvCredentialsBackend and exists for the
+// same reason, which only became visible on real hardware: the macOS vault key
+// lives in the login keychain, and that keychain is locked in any session that
+// did not log in through the GUI. Without an override, ccm on macOS cannot read
+// or write its vault over SSH, in a tmux pane whose keychain has relocked, or
+// from a LaunchAgent that runs before login. Note this is deliberately not
+// automatic. Falling back on its own would quietly downgrade an encrypted vault
+// to a plain 0600 file, so the user has to ask for it.
+const EnvVaultBackend = "CCM_VAULT_BACKEND"
+
 // KeychainService is the macOS Keychain generic-password item Claude Code uses.
 const KeychainService = "Claude Code-credentials"
 

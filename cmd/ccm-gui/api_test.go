@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -50,6 +51,12 @@ func newEnv(t *testing.T) string {
 	// Forced so the suite behaves identically on macOS, where the default
 	// backend is the Keychain and the fixture file would be ignored.
 	t.Setenv("CCM_CREDENTIALS_BACKEND", "file")
+	// Same reason for the vault, and macOS only: its key lives in the login
+	// keychain, which a non-GUI session cannot unlock. Windows and Linux seal
+	// fine headless, so they keep exercising their real scheme.
+	if runtime.GOOS == "darwin" {
+		t.Setenv("CCM_VAULT_BACKEND", "file")
+	}
 
 	settings := `{"claudeConfigDir":` + quoteJSON(claudeDir) + `,"requireClosedSessions":false}`
 	if err := os.WriteFile(filepath.Join(ccmHome, "config.json"), []byte(settings), 0o600); err != nil {

@@ -112,7 +112,11 @@ func Open(path string) (*Vault, error) {
 		}
 		path = filepath.Join(dir, "vault.json")
 	}
-	v := &Vault{Path: path, sealer: NewSealer()}
+	sealer, err := NewSealer()
+	if err != nil {
+		return nil, err
+	}
+	v := &Vault{Path: path, sealer: sealer}
 
 	b, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -127,9 +131,15 @@ func Open(path string) (*Vault, error) {
 	if err := json.Unmarshal(b, &env); err != nil {
 		return nil, fmt.Errorf("parse vault envelope %s: %w", path, err)
 	}
+	// Reached either by copying a vault between machines, or, now that the
+	// sealer is selectable, by changing CCM_VAULT_BACKEND on one machine. The
+	// second case is recoverable and by far the more likely mistake, so the
+	// message names it rather than only reporting non-portability.
 	if env.Sealer != v.sealer.Name() {
-		return nil, fmt.Errorf("vault %s was sealed with %q but this platform uses %q; "+
-			"vaults are not portable between machines", path, env.Sealer, v.sealer.Name())
+		return nil, fmt.Errorf("vault %s was sealed with %q but this ccm is using %q. "+
+			"If you changed %s, set it back to read this vault; otherwise the vault was "+
+			"written on a different machine or platform and cannot be moved",
+			path, env.Sealer, v.sealer.Name(), config.EnvVaultBackend)
 	}
 	sealed, err := base64.StdEncoding.DecodeString(env.Data)
 	if err != nil {

@@ -27,7 +27,29 @@ func openTemp(t *testing.T) *Vault {
 	return v
 }
 
+// skipIfSealerUnavailable skips when this session cannot drive the platform's
+// default sealer.
+//
+// The only real case is macOS: the login keychain is locked for any session
+// that did not log in through the GUI, so an SSH session or a headless runner
+// cannot exercise the Keychain sealer. Skipping is deliberately preferred to
+// forcing CCM_VAULT_BACKEND=file here, because forcing it would quietly stop
+// testing the scheme that actually ships to macOS users while still reporting
+// a pass.
+func skipIfSealerUnavailable(t *testing.T) {
+	t.Helper()
+	s, err := NewSealer()
+	if err != nil {
+		t.Fatalf("NewSealer: %v", err)
+	}
+	if _, err := s.Seal([]byte(`{}`)); err != nil {
+		t.Skipf("the default sealer (%s) cannot run in this session: %v", s.Name(), err)
+	}
+}
+
 func TestSaveAndReopenRoundTrip(t *testing.T) {
+	skipIfSealerUnavailable(t)
+
 	home := t.TempDir()
 	t.Setenv("CCM_HOME", home)
 	path := filepath.Join(home, "vault.json")
