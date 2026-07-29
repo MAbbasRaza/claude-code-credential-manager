@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MAbbasRaza/claude-code-credential-manager/internal/config"
+	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/config"
 )
 
 // testKeychainStore builds a store bound to a throwaway Keychain service.

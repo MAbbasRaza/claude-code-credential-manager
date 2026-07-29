@@ -9,7 +9,7 @@ package store
 import (
 	"fmt"
 
-	"github.com/MAbbasRaza/claude-code-credential-manager/internal/config"
+	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/config"
 )
 
 // Store is the whole credentials document, not just the account portion.

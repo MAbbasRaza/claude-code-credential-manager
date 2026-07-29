@@ -20,10 +20,10 @@
   !define SRCDIR "..\..\bin"
 !endif
 
-!define APPNAME    "Claude Code Credential Manager"
+!define APPNAME    "Claude Code Multi-Account Manager"
 !define SHORTNAME  "ccm"
 !define PUBLISHER  "MAbbasRaza"
-!define HOMEPAGE   "https://github.com/MAbbasRaza/claude-code-credential-manager"
+!define HOMEPAGE   "https://github.com/MAbbasRaza/claude-code-multi-account-manager"
 !define UNINSTKEY  "Software\Microsoft\Windows\CurrentVersion\Uninstall\${SHORTNAME}"
 
 Name "${APPNAME}"

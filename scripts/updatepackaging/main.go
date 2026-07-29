@@ -105,7 +105,7 @@ func mustSum(sums map[string]string, asset string) (string, error) {
 	return h, nil
 }
 
-const downloadBase = "https://github.com/MAbbasRaza/claude-code-credential-manager/releases/download"
+const downloadBase = "https://github.com/MAbbasRaza/claude-code-multi-account-manager/releases/download"
 
 // updateScoop decodes and re-encodes the manifest so a malformed file fails
 // here rather than after publication.

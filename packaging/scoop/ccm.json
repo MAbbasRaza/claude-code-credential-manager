@@ -2,32 +2,32 @@
     "architecture": {
         "64bit": {
             "hash": "4b92adbb4f1a644a3425ee53d53728ae4b75f8c23f5d3328cb5b07aaa4ef8761",
-            "url": "https://github.com/MAbbasRaza/claude-code-credential-manager/releases/download/v0.2.1/ccm-windows-amd64.exe#/ccm.exe"
+            "url": "https://github.com/MAbbasRaza/claude-code-multi-account-manager/releases/download/v0.2.1/ccm-windows-amd64.exe#/ccm.exe"
         },
         "arm64": {
             "hash": "7df68d2f0f50b36f83324fdad1792f84ef7956b2701e327756d6019209fb85bf",
-            "url": "https://github.com/MAbbasRaza/claude-code-credential-manager/releases/download/v0.2.1/ccm-windows-arm64.exe#/ccm.exe"
+            "url": "https://github.com/MAbbasRaza/claude-code-multi-account-manager/releases/download/v0.2.1/ccm-windows-arm64.exe#/ccm.exe"
         }
     },
     "autoupdate": {
         "architecture": {
             "64bit": {
-                "url": "https://github.com/MAbbasRaza/claude-code-credential-manager/releases/download/v$version/ccm-windows-amd64.exe#/ccm.exe"
+                "url": "https://github.com/MAbbasRaza/claude-code-multi-account-manager/releases/download/v$version/ccm-windows-amd64.exe#/ccm.exe"
             },
             "arm64": {
-                "url": "https://github.com/MAbbasRaza/claude-code-credential-manager/releases/download/v$version/ccm-windows-arm64.exe#/ccm.exe"
+                "url": "https://github.com/MAbbasRaza/claude-code-multi-account-manager/releases/download/v$version/ccm-windows-arm64.exe#/ccm.exe"
             }
         },
         "hash": {
-            "url": "https://github.com/MAbbasRaza/claude-code-credential-manager/releases/download/v$version/SHA256SUMS"
+            "url": "https://github.com/MAbbasRaza/claude-code-multi-account-manager/releases/download/v$version/SHA256SUMS"
         }
     },
     "bin": "ccm.exe",
     "checkver": {
-        "github": "https://github.com/MAbbasRaza/claude-code-credential-manager"
+        "github": "https://github.com/MAbbasRaza/claude-code-multi-account-manager"
     },
     "description": "Switch between Claude Code accounts without signing in again",
-    "homepage": "https://github.com/MAbbasRaza/claude-code-credential-manager",
+    "homepage": "https://github.com/MAbbasRaza/claude-code-multi-account-manager",
     "license": "MIT",
     "post_install": [
         "Write-Host ''",

@@ -3,7 +3,7 @@
     Installer for ccm, the Claude Code credential manager.
 
 .DESCRIPTION
-    irm https://raw.githubusercontent.com/MAbbasRaza/claude-code-credential-manager/main/install.ps1 | iex
+    irm https://raw.githubusercontent.com/MAbbasRaza/claude-code-multi-account-manager/main/install.ps1 | iex
 
     Installs into %LOCALAPPDATA%\Programs\ccm and adds it to your user PATH.
     Never requires administrator rights: everything lives under your profile and
@@ -37,11 +37,11 @@
     Skip SHA256 verification. Not recommended.
 
 .EXAMPLE
-    irm https://raw.githubusercontent.com/MAbbasRaza/claude-code-credential-manager/main/install.ps1 | iex
+    irm https://raw.githubusercontent.com/MAbbasRaza/claude-code-multi-account-manager/main/install.ps1 | iex
 
 .EXAMPLE
     # With options, download first so parameters can be passed:
-    irm https://raw.githubusercontent.com/MAbbasRaza/claude-code-credential-manager/main/install.ps1 -OutFile install.ps1
+    irm https://raw.githubusercontent.com/MAbbasRaza/claude-code-multi-account-manager/main/install.ps1 -OutFile install.ps1
     .\install.ps1 -Tray
 #>
 [CmdletBinding()]
@@ -53,7 +53,7 @@ param(
     [switch]$NoVerify
 )
 
-$Repo = 'MAbbasRaza/claude-code-credential-manager'
+$Repo = 'MAbbasRaza/claude-code-multi-account-manager'
 
 function Write-Info { param([string]$Message) Write-Host $Message }
 function Write-Ok   { param([string]$Message) Write-Host $Message -ForegroundColor Green }

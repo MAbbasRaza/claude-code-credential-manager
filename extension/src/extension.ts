@@ -6,7 +6,7 @@ let refreshTimer: NodeJS.Timeout | undefined;
 let output: vscode.OutputChannel;
 
 export function activate(context: vscode.ExtensionContext): void {
-  output = vscode.window.createOutputChannel("Claude Code Credential Manager");
+  output = vscode.window.createOutputChannel("Claude Code Multi-Account Manager");
   context.subscriptions.push(output);
 
   statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
@@ -456,7 +456,7 @@ async function reportError(err: unknown, action: string): Promise<void> {
       await vscode.commands.executeCommand("workbench.action.openSettings", "ccm.binaryPath");
     } else if (choice === "Installation Help") {
       await vscode.env.openExternal(
-        vscode.Uri.parse("https://github.com/MAbbasRaza/claude-code-credential-manager#install")
+        vscode.Uri.parse("https://github.com/MAbbasRaza/claude-code-multi-account-manager#install")
       );
     }
     return;

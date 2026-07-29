@@ -1,4 +1,4 @@
-module github.com/MAbbasRaza/claude-code-credential-manager
+module github.com/MAbbasRaza/claude-code-multi-account-manager
 
 // 1.25 is the floor because of GO-2026-4971, a net.Dial panic reachable from
 // the tray app through systray.Run. It is fixed in the standard library at

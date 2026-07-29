@@ -7,11 +7,11 @@ import (
 
 	"github.com/webview/webview_go"
 
-	"github.com/MAbbasRaza/claude-code-credential-manager/internal/autostart"
-	"github.com/MAbbasRaza/claude-code-credential-manager/internal/config"
-	"github.com/MAbbasRaza/claude-code-credential-manager/internal/locate"
-	"github.com/MAbbasRaza/claude-code-credential-manager/internal/manager"
-	"github.com/MAbbasRaza/claude-code-credential-manager/internal/proc"
+	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/autostart"
+	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/config"
+	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/locate"
+	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/manager"
+	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/proc"
 )
 
 // api is everything the page can call.

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Installer for ccm, the Claude Code credential manager.
 #
-#   curl -fsSL https://raw.githubusercontent.com/MAbbasRaza/claude-code-credential-manager/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/MAbbasRaza/claude-code-multi-account-manager/main/install.sh | sh
 #
 # Options, all via environment variables so the script stays pipeable:
 #
@@ -17,7 +17,7 @@
 
 set -eu
 
-REPO="MAbbasRaza/claude-code-credential-manager"
+REPO="MAbbasRaza/claude-code-multi-account-manager"
 VERSION="${CCM_VERSION:-latest}"
 INSTALL_DIR="${CCM_INSTALL_DIR:-$HOME/.local/bin}"
 INSTALL_TRAY="${CCM_TRAY:-0}"

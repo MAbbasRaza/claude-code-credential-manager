@@ -22,8 +22,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MAbbasRaza/claude-code-credential-manager/internal/config"
-	"github.com/MAbbasRaza/claude-code-credential-manager/internal/patch"
+	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/config"
+	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/patch"
 )
 
 // SchemaVersion guards against silently misreading a vault written by a

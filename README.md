@@ -2,7 +2,7 @@
   <img src="assets/icon.png" alt="ccm" width="128" height="128">
 </p>
 
-<h1 align="center">Claude Code Credential Manager (<code>ccm</code>)</h1>
+<h1 align="center">Claude Code Multi-Account Manager (<code>ccm</code>)</h1>
 
 <p align="center">Switch between Claude Code accounts without signing in again.</p>
 
@@ -78,13 +78,13 @@ installing the incoming one. This is the single most important thing it does.
 **macOS and Linux**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MAbbasRaza/claude-code-credential-manager/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/MAbbasRaza/claude-code-multi-account-manager/main/install.sh | sh
 ```
 
 **Windows**
 
 ```powershell
-irm https://raw.githubusercontent.com/MAbbasRaza/claude-code-credential-manager/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/MAbbasRaza/claude-code-multi-account-manager/main/install.ps1 | iex
 ```
 
 Both installers detect your architecture, verify the download against the published
@@ -113,24 +113,24 @@ brew install MAbbasRaza/tap/ccm
 **Scoop** (Windows) — installs straight from the manifest, no bucket to add:
 
 ```powershell
-scoop install https://raw.githubusercontent.com/MAbbasRaza/claude-code-credential-manager/main/packaging/scoop/ccm.json
+scoop install https://raw.githubusercontent.com/MAbbasRaza/claude-code-multi-account-manager/main/packaging/scoop/ccm.json
 ```
 
 **Go** — if you already have a toolchain:
 
 ```bash
-go install github.com/MAbbasRaza/claude-code-credential-manager/cmd/ccm@latest
+go install github.com/MAbbasRaza/claude-code-multi-account-manager/cmd/ccm@latest
 ```
 
 **Manually** — download from
-[Releases](https://github.com/MAbbasRaza/claude-code-credential-manager/releases), check it
+[Releases](https://github.com/MAbbasRaza/claude-code-multi-account-manager/releases), check it
 against `SHA256SUMS`, rename it to `ccm`, and put it on your `PATH`.
 
 **From source** — requires Go 1.25 or later:
 
 ```bash
-git clone https://github.com/MAbbasRaza/claude-code-credential-manager.git
-cd claude-code-credential-manager
+git clone https://github.com/MAbbasRaza/claude-code-multi-account-manager.git
+cd claude-code-multi-account-manager
 go build -o ccm ./cmd/ccm
 go test ./... -count=1
 
@@ -329,7 +329,7 @@ Two things worth knowing up front:
   tested, but the full switch cycle has only ever been exercised on Windows.
 
 Security issues go through a private
-[security advisory](https://github.com/MAbbasRaza/claude-code-credential-manager/security/advisories/new),
+[security advisory](https://github.com/MAbbasRaza/claude-code-multi-account-manager/security/advisories/new),
 never a public issue. See [SECURITY.md](SECURITY.md).
 
 ## License

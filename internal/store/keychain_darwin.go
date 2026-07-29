@@ -9,7 +9,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/MAbbasRaza/claude-code-credential-manager/internal/config"
+	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/config"
 )
 
 // KeychainStore is the macOS backend.

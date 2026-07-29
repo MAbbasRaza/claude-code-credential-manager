@@ -1,13 +1,13 @@
 {
-  "name": "claude-code-credential-manager",
-  "displayName": "Claude Code Credential Manager",
+  "name": "claude-code-multi-account-manager",
+  "displayName": "Claude Code Multi-Account Manager",
   "description": "Switch between Claude Code accounts from VS Code without signing in again.",
   "version": "0.1.0",
   "publisher": "MAbbasRaza",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/MAbbasRaza/claude-code-credential-manager.git"
+    "url": "https://github.com/MAbbasRaza/claude-code-multi-account-manager.git"
   },
   "engines": {
     "vscode": "^1.85.0"
@@ -26,36 +26,36 @@
       {
         "command": "ccm.switchAccount",
         "title": "Claude: Switch Account",
-        "category": "Claude Code Credential Manager"
+        "category": "Claude Code Multi-Account Manager"
       },
       {
         "command": "ccm.captureAccount",
         "title": "Claude: Capture Current Login as Profile",
-        "category": "Claude Code Credential Manager"
+        "category": "Claude Code Multi-Account Manager"
       },
       {
         "command": "ccm.manageAccounts",
         "title": "Claude: Manage Accounts",
-        "category": "Claude Code Credential Manager"
+        "category": "Claude Code Multi-Account Manager"
       },
       {
         "command": "ccm.renameProfile",
         "title": "Claude: Rename Account Profile",
-        "category": "Claude Code Credential Manager"
+        "category": "Claude Code Multi-Account Manager"
       },
       {
         "command": "ccm.removeProfile",
         "title": "Claude: Remove Account Profile",
-        "category": "Claude Code Credential Manager"
+        "category": "Claude Code Multi-Account Manager"
       },
       {
         "command": "ccm.doctor",
         "title": "Claude: Diagnose Credential Manager",
-        "category": "Claude Code Credential Manager"
+        "category": "Claude Code Multi-Account Manager"
       }
     ],
     "configuration": {
-      "title": "Claude Code Credential Manager",
+      "title": "Claude Code Multi-Account Manager",
       "properties": {
         "ccm.binaryPath": {
           "type": "string",

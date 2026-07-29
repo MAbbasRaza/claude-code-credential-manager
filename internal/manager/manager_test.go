@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MAbbasRaza/claude-code-credential-manager/internal/patch"
+	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/patch"
 	"github.com/tidwall/gjson"
 )
 

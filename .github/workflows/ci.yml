@@ -214,6 +214,11 @@ jobs:
         include:
           - { os: ubuntu-latest, goos: linux, goarch: amd64 }
           - { os: macos-latest, goos: darwin, goarch: arm64 }
+          # Intel Macs are still in service; a 2018 model is x86_64 and cannot
+          # run an arm64 build at all. Cross-compiled from the Apple Silicon
+          # runner, which is possible because the macOS SDK ships universal
+          # framework stubs and clang targets either architecture.
+          - { os: macos-latest, goos: darwin, goarch: amd64 }
           - { os: windows-latest, goos: windows, goarch: amd64 }
     steps:
       - uses: actions/checkout@v4
@@ -228,19 +233,27 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libayatana-appindicator3-dev
 
-      # The tray needs cgo for Cocoa and AppIndicator, so each target is built
-      # on its own runner for that runner's architecture only. Cross-compiling
-      # it is not supported; see README for which tray builds ship.
+      # The tray needs cgo for Cocoa and AppIndicator. Linux and Windows are
+      # built natively; macOS builds both architectures from one runner using
+      # clang's -arch flag, since Go alone cannot retarget a cgo build.
       - name: Build
         shell: bash
         env:
           CGO_ENABLED: '1'
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
         run: |
           version="${GITHUB_REF_NAME}"
           name="ccm-tray-${{ matrix.goos }}-${{ matrix.goarch }}"
           if [ "${{ matrix.goos }}" = "windows" ]; then name="${name}.exe"; fi
+          if [ "${{ matrix.goos }}" = "darwin" ]; then
+            arch=x86_64
+            [ "${{ matrix.goarch }}" = "arm64" ] && arch=arm64
+            export CGO_CFLAGS="-arch ${arch}" CGO_LDFLAGS="-arch ${arch}"
+          fi
           mkdir -p dist
           go build -trimpath -ldflags "-s -w -X main.version=${version}" -o "dist/${name}" ./cmd/ccm-tray
+          file "dist/${name}" || true
 
       - uses: actions/upload-artifact@v4
         with:
@@ -259,6 +272,9 @@ jobs:
         include:
           - { os: ubuntu-latest, goos: linux, goarch: amd64 }
           - { os: macos-latest, goos: darwin, goarch: arm64 }
+          # See the tray job: Intel Macs are still in service and need their
+          # own build, cross-compiled from the Apple Silicon runner.
+          - { os: macos-latest, goos: darwin, goarch: amd64 }
           - { os: windows-latest, goos: windows, goarch: amd64 }
     steps:
       - uses: actions/checkout@v4
@@ -279,18 +295,25 @@ jobs:
             fi
           done
 
-      # webview binds the platform's own browser engine through cgo, so like
-      # the tray this is built natively per target and never cross-compiled.
-      # -H=windowsgui suppresses the console window that would otherwise open
-      # behind the app on Windows.
+      # webview binds the platform's own browser engine through cgo. Linux and
+      # Windows build natively; macOS builds both architectures from one runner
+      # via clang's -arch flag. -H=windowsgui suppresses the console window that
+      # would otherwise open behind the app on Windows.
       - name: Build
         shell: bash
         env:
           CGO_ENABLED: '1'
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
         run: |
           version="${GITHUB_REF_NAME}"
           name="ccm-gui-${{ matrix.goos }}-${{ matrix.goarch }}"
           ldflags="-s -w -X main.version=${version}"
+          if [ "${{ matrix.goos }}" = "darwin" ]; then
+            arch=x86_64
+            [ "${{ matrix.goarch }}" = "arm64" ] && arch=arm64
+            export CGO_CFLAGS="-arch ${arch}" CGO_LDFLAGS="-arch ${arch}"
+          fi
           if [ "${{ matrix.goos }}" = "windows" ]; then
             name="${name}.exe"
             ldflags="${ldflags} -H=windowsgui"

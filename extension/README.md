@@ -1,10 +1,10 @@
-# Claude Code Credential Manager for VS Code
+# Claude Code Multi-Account Manager for VS Code
 
 Switch between Claude Code accounts from inside VS Code, without signing in again.
 
 Claude Code keeps one account's authentication state at a time, so signing into a second account
 destroys the first one's refresh token and returning to it means a full browser authorization.
-This extension drives [`ccm`](https://github.com/MAbbasRaza/claude-code-credential-manager), which
+This extension drives [`ccm`](https://github.com/MAbbasRaza/claude-code-multi-account-manager), which
 parks each account and swaps it back in offline.
 
 ## Requirements

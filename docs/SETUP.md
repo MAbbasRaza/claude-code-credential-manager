@@ -10,13 +10,13 @@ your second account once.
 **macOS and Linux**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MAbbasRaza/claude-code-credential-manager/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/MAbbasRaza/claude-code-multi-account-manager/main/install.sh | sh
 ```
 
 **Windows**
 
 ```powershell
-irm https://raw.githubusercontent.com/MAbbasRaza/claude-code-credential-manager/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/MAbbasRaza/claude-code-multi-account-manager/main/install.ps1 | iex
 ```
 
 Add `CCM_TRAY=1` (or `-Tray` on Windows) if you want the system tray app too.
@@ -141,7 +141,7 @@ If you would rather not use the terminal at all, install the desktop app:
 
 ```bash
 # macOS, Linux
-CCM_GUI=1 curl -fsSL https://raw.githubusercontent.com/MAbbasRaza/claude-code-credential-manager/main/install.sh | sh
+CCM_GUI=1 curl -fsSL https://raw.githubusercontent.com/MAbbasRaza/claude-code-multi-account-manager/main/install.sh | sh
 ```
 
 Run `ccm-gui`. It gives you one window with everything: the list of saved accounts with the
@@ -193,7 +193,7 @@ windows/amd64. On other platforms, build it from source.
 ## Optional: the VS Code extension
 
 Download `ccm-extension.vsix` from the
-[latest release](https://github.com/MAbbasRaza/claude-code-credential-manager/releases/latest),
+[latest release](https://github.com/MAbbasRaza/claude-code-multi-account-manager/releases/latest),
 then:
 
 ```bash

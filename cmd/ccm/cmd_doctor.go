@@ -6,9 +6,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/MAbbasRaza/claude-code-credential-manager/internal/config"
-	"github.com/MAbbasRaza/claude-code-credential-manager/internal/manager"
-	"github.com/MAbbasRaza/claude-code-credential-manager/internal/proc"
+	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/config"
+	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/manager"
+	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/proc"
 )
 
 type doctorReport struct {

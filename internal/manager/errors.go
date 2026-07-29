@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/MAbbasRaza/claude-code-credential-manager/internal/proc"
+	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/proc"
 )
 
 // The two reasons a switch can be refused are different in kind, and callers

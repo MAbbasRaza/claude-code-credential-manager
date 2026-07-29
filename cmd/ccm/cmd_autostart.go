@@ -4,8 +4,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/MAbbasRaza/claude-code-credential-manager/internal/autostart"
-	"github.com/MAbbasRaza/claude-code-credential-manager/internal/locate"
+	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/autostart"
+	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/locate"
 )
 
 // trayEntry describes what gets registered to run at login.

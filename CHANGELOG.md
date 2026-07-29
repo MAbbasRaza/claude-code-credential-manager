@@ -48,7 +48,7 @@ crashed identically, so the fault was the toolkit against that graphics setup ra
 code, and shipping a GUI that cannot start is worse than shipping none. The replacement also
 turned out to be a tenth of the size: 6.6 MB against 42.4 MB.
 
-[0.2.0]: https://github.com/MAbbasRaza/claude-code-credential-manager/releases/tag/v0.2.0
+[0.2.0]: https://github.com/MAbbasRaza/claude-code-multi-account-manager/releases/tag/v0.2.0
 
 ## [0.1.2] - 2026-07-28
 
@@ -66,7 +66,7 @@ turned out to be a tenth of the size: 6.6 MB against 42.4 MB.
   the only stored copy of a refresh token that nothing can regenerate without a browser sign-in.
   It now points at `ccm rename`.
 
-[0.1.2]: https://github.com/MAbbasRaza/claude-code-credential-manager/releases/tag/v0.1.2
+[0.1.2]: https://github.com/MAbbasRaza/claude-code-multi-account-manager/releases/tag/v0.1.2
 
 ## [0.1.1] - 2026-07-28
 
@@ -77,7 +77,7 @@ turned out to be a tenth of the size: 6.6 MB against 42.4 MB.
   assembles them into a multi-resolution Windows ICO so the shell picks the right one per display
   scaling. The VS Code extension carries it as its marketplace icon.
 
-[0.1.1]: https://github.com/MAbbasRaza/claude-code-credential-manager/releases/tag/v0.1.1
+[0.1.1]: https://github.com/MAbbasRaza/claude-code-multi-account-manager/releases/tag/v0.1.1
 
 ## [0.1.0] - 2026-07-27
 
@@ -125,4 +125,4 @@ First release. Verified by CI on Windows, macOS and Linux.
 - The tray app's menu behaviour is covered only by unit tests; nobody has clicked it.
 - `ccm-tray` requires cgo and ships only for linux/amd64, darwin/arm64 and windows/amd64.
 
-[0.1.0]: https://github.com/MAbbasRaza/claude-code-credential-manager/releases/tag/v0.1.0
+[0.1.0]: https://github.com/MAbbasRaza/claude-code-multi-account-manager/releases/tag/v0.1.0

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MAbbasRaza/claude-code-credential-manager/internal/proc"
+	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/proc"
 )
 
 // This is the trap that made typed errors necessary, pinned so nobody

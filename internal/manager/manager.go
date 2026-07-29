@@ -18,12 +18,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MAbbasRaza/claude-code-credential-manager/internal/config"
-	"github.com/MAbbasRaza/claude-code-credential-manager/internal/lock"
-	"github.com/MAbbasRaza/claude-code-credential-manager/internal/patch"
-	"github.com/MAbbasRaza/claude-code-credential-manager/internal/proc"
-	"github.com/MAbbasRaza/claude-code-credential-manager/internal/store"
-	"github.com/MAbbasRaza/claude-code-credential-manager/internal/vault"
+	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/config"
+	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/lock"
+	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/patch"
+	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/proc"
+	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/store"
+	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/vault"
 )
 
 // Manager owns one resolved Claude Code installation and its vault.

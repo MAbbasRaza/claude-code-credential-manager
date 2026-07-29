@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/MAbbasRaza/claude-code-credential-manager/internal/config"
+	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/config"
 )
 
 // FileStore is the Windows and Linux backend.

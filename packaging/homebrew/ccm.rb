@@ -9,28 +9,28 @@
 # does not require a Go toolchain.
 class Ccm < Formula
   desc "Switch between Claude Code accounts without signing in again"
-  homepage "https://github.com/MAbbasRaza/claude-code-credential-manager"
+  homepage "https://github.com/MAbbasRaza/claude-code-multi-account-manager"
   version "0.2.1"
   license "MIT"
 
   on_macos do
     on_arm do
-      url "https://github.com/MAbbasRaza/claude-code-credential-manager/releases/download/v#{version}/ccm-darwin-arm64"
+      url "https://github.com/MAbbasRaza/claude-code-multi-account-manager/releases/download/v#{version}/ccm-darwin-arm64"
       sha256 "5a263dfc6bdfbbaf89fd3bc759cc5d8499601102b1e0069c0e9d153fbc9518ac"
     end
     on_intel do
-      url "https://github.com/MAbbasRaza/claude-code-credential-manager/releases/download/v#{version}/ccm-darwin-amd64"
+      url "https://github.com/MAbbasRaza/claude-code-multi-account-manager/releases/download/v#{version}/ccm-darwin-amd64"
       sha256 "4658daef4a86a0523e776a6567d61f7876a1cb99acac0c89e1495851ae81759d"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/MAbbasRaza/claude-code-credential-manager/releases/download/v#{version}/ccm-linux-arm64"
+      url "https://github.com/MAbbasRaza/claude-code-multi-account-manager/releases/download/v#{version}/ccm-linux-arm64"
       sha256 "90875bc2af14f0099195cf40637d2a34ce7f72cef18a3e10a2f0d125ded2a925"
     end
     on_intel do
-      url "https://github.com/MAbbasRaza/claude-code-credential-manager/releases/download/v#{version}/ccm-linux-amd64"
+      url "https://github.com/MAbbasRaza/claude-code-multi-account-manager/releases/download/v#{version}/ccm-linux-amd64"
       sha256 "c41d94f56d4040a683b1432a49e42fe4d327222d67e35694b01a65039ae0b8fa"
     end
   end

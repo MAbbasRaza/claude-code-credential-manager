@@ -15,7 +15,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/MAbbasRaza/claude-code-credential-manager/internal/icon"
+	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/icon"
 )
 
 func main() {

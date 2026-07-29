@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MAbbasRaza/claude-code-credential-manager/internal/manager"
-	"github.com/MAbbasRaza/claude-code-credential-manager/internal/vault"
+	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/manager"
+	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/vault"
 )
 
 // version is overridden at build time with -ldflags "-X main.version=...".
