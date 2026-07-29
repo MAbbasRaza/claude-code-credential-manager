@@ -110,6 +110,31 @@ jobs:
       - name: Build desktop app
         run: go build ./cmd/ccm-gui
 
+      # The release ships an Intel build of both cgo programs, cross-compiled
+      # from this Apple Silicon runner. That path is exercised here on every
+      # push rather than only at tag time, because a cgo cross-compile can fail
+      # for reasons a native build never reveals, and discovering it during a
+      # release is discovering it too late.
+      - name: Cross-compile for Intel Macs
+        if: runner.os == 'macOS'
+        env:
+          CGO_ENABLED: '1'
+          GOARCH: amd64
+          CGO_CFLAGS: '-arch x86_64'
+          CGO_LDFLAGS: '-arch x86_64'
+        run: |
+          go build -o /tmp/ccm-tray-amd64 ./cmd/ccm-tray
+          go build -o /tmp/ccm-gui-amd64 ./cmd/ccm-gui
+          file /tmp/ccm-tray-amd64 /tmp/ccm-gui-amd64
+          # Assert the architecture rather than trusting the toolchain: a
+          # silently ignored -arch would produce arm64 binaries named amd64.
+          for f in /tmp/ccm-tray-amd64 /tmp/ccm-gui-amd64; do
+            if ! file "$f" | grep -q 'x86_64'; then
+              echo "::error::$f is not x86_64; the Intel build would be broken"
+              exit 1
+            fi
+          done
+
   extension:
     name: extension
     runs-on: ubuntu-latest
