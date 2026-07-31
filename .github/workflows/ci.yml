@@ -301,6 +301,23 @@ jobs:
           test -L /usr/local/bin/ccm
           /usr/local/bin/ccm --version
 
+          # build-pkg.sh only warns when it finds one architecture, so a
+          # regression in the merge would produce a thin package that passes
+          # every other check here and then fails to launch on the machines
+          # this runner is not.
+          for prog in \
+            "/Applications/Claude Code Accounts.app/Contents/MacOS/ccm-gui" \
+            "/Applications/Claude Code Accounts.app/Contents/MacOS/ccm" \
+            "/Applications/Claude Code Accounts Menu Bar.app/Contents/MacOS/ccm-tray"
+          do
+            archs="$(lipo -archs "$prog")"
+            echo "$(basename "$prog"): $archs"
+            case "$archs" in
+              *x86_64*arm64*|*arm64*x86_64*) ;;
+              *) echo "::error::$(basename "$prog") is not universal ($archs)"; exit 1 ;;
+            esac
+          done
+
           plutil -extract LSUIElement raw \
             "/Applications/Claude Code Accounts Menu Bar.app/Contents/Info.plist"
           if plutil -extract LSUIElement raw \
