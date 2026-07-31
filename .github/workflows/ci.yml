@@ -463,10 +463,97 @@ jobs:
           path: dist/ccm-setup-windows.exe
           if-no-files-found: error
 
+  package-linux:
+    name: Debian package
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [release-cli, release-tray, release-gui]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      # amd64 only, because release-tray and release-gui build the two cgo
+      # programs for linux/amd64 alone. A CLI-only arm64 package would install
+      # menu entries for applications it does not ship.
+      - name: Collect Linux binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: staging
+          pattern: '*-linux-amd64'
+
+      - name: Stage binaries under their installed names
+        run: |
+          mkdir -p bin
+          cp staging/cli-linux-amd64/ccm-linux-amd64        bin/ccm
+          cp staging/tray-linux-amd64/ccm-tray-linux-amd64  bin/ccm-tray
+          cp staging/gui-linux-amd64/ccm-gui-linux-amd64    bin/ccm-gui
+          chmod +x bin/*
+          ls -l bin
+
+      - name: Build the package
+        env:
+          CCM_VERSION: ${{ github.ref_name }}
+          CCM_SRCDIR: bin
+          CCM_OUTDIR: dist
+        run: sh packaging/linux/build-deb.sh
+
+      # Installed in a clean container rather than on the runner. The runner
+      # already carries GTK and WebKit, so installing there would prove the
+      # package unpacks but not that its Depends line is correct, and a wrong
+      # dependency is invisible until a user on a plain system hits it.
+      - name: Install on a clean Ubuntu and verify
+        run: |
+          docker run --rm -v "$PWD/dist:/out:ro" ubuntu:24.04 bash -c '
+            set -eu
+            export DEBIAN_FRONTEND=noninteractive
+
+            # The test is worthless if these are already present.
+            for lib in libgtk-3-0t64 libwebkit2gtk-4.1-0 libayatana-appindicator3-1; do
+              if dpkg -s "$lib" >/dev/null 2>&1; then
+                echo "::error::$lib is already installed; this check proves nothing"
+                exit 1
+              fi
+            done
+
+            apt-get update -qq
+            apt-get install -y -qq desktop-file-utils >/dev/null
+            apt-get install -y /out/ccm-linux-amd64.deb
+
+            ccm --version
+            desktop-file-validate /usr/share/applications/ccm.desktop
+            desktop-file-validate /usr/share/applications/ccm-tray.desktop
+
+            # Proves internal/locate resolves siblings from the installed
+            # layout, not just in tests.
+            ccm autostart status | grep -q "/usr/bin/ccm-tray"
+
+            # The real assertion behind Depends: a missing library shows up
+            # here rather than as a loader error on a user machine.
+            for p in ccm-tray ccm-gui; do
+              if ldd "/usr/bin/$p" | grep "not found"; then
+                echo "::error::$p has unresolved shared libraries"
+                exit 1
+              fi
+            done
+
+            apt-get purge -y -qq ccm >/dev/null
+            test ! -e /usr/bin/ccm
+            echo "clean install, verify and purge all passed"
+          '
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-linux
+          path: dist/ccm-linux-amd64.deb
+          if-no-files-found: error
+
   publish:
     name: publish release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [release-cli, release-tray, release-gui, package-windows]
+    needs: [release-cli, release-tray, release-gui, package-windows, package-linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write
