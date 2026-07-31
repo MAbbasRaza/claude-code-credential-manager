@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 // Names of the executables, without any platform suffix.
@@ -21,6 +22,27 @@ const (
 	GUI  = "ccm-gui"
 )
 
+// darwinBundles maps a program to the application bundle that carries it.
+//
+// macOS derives an application's identity by walking up from the executable
+// path, so every binary inside one bundle shares that bundle's Info.plist. The
+// menu bar app needs LSUIElement and the desktop app must not have it, and a
+// single plist cannot say both. They therefore ship as two bundles, and the CLI
+// rides along in the desktop app's because it is the one a user opens.
+//
+// The names here must match the directories packaging/macos/build-pkg.sh
+// creates. Nothing at compile time checks that, so the release workflow asserts
+// it by installing the package and reading back `ccm autostart status`.
+var darwinBundles = map[string]string{
+	CLI:  "Claude Code Accounts",
+	GUI:  "Claude Code Accounts",
+	Tray: "Claude Code Accounts Menu Bar",
+}
+
+// bundleSuffix is the path from a bundle root to the directory holding its
+// executables.
+var bundleSuffix = filepath.Join("Contents", "MacOS")
+
 // Executable returns the absolute path to a sibling program, or an empty
 // string when it is not installed.
 //
@@ -28,29 +50,112 @@ const (
 // desktop app are optional, and callers are expected to hide the features that
 // depend on them instead of offering something that fails on use.
 func Executable(name string) string {
-	if runtime.GOOS == "windows" {
+	return realFinder().find(name)
+}
+
+// finder holds everything Executable touches in the environment.
+//
+// It exists so the macOS bundle logic can be tested from any platform. That
+// path is the one most likely to break and the one least likely to be exercised
+// during development, since it only appears once the program is installed from
+// the package rather than run from a build directory.
+type finder struct {
+	goos       string
+	executable func() (string, error)
+	evalSyms   func(string) (string, error)
+	lookPath   func(string) (string, error)
+	isExec     func(string) bool
+}
+
+func realFinder() finder {
+	return finder{
+		goos:       runtime.GOOS,
+		executable: os.Executable,
+		evalSyms:   filepath.EvalSymlinks,
+		lookPath:   exec.LookPath,
+		isExec:     isExecutableFile,
+	}
+}
+
+func (f finder) find(name string) string {
+	if f.goos == "windows" {
 		name += ".exe"
 	}
 
-	// Beside the running binary first. An installation directory is the
-	// strongest signal of which copy belongs together.
-	if self, err := os.Executable(); err == nil {
-		if resolved, err := filepath.EvalSymlinks(self); err == nil {
+	if self, err := f.executable(); err == nil {
+		// Resolve first: on macOS a program started through a symlink in
+		// /usr/local/bin reports the symlink, and its siblings live beside the
+		// real file inside the bundle, not beside the link.
+		if resolved, err := f.evalSyms(self); err == nil {
 			self = resolved
 		}
-		candidate := filepath.Join(filepath.Dir(self), name)
-		if isExecutableFile(candidate) {
+		dir := filepath.Dir(self)
+
+		// Beside the running binary. An installation directory is the
+		// strongest signal of which copy belongs together.
+		if candidate := filepath.Join(dir, name); f.isExec(candidate) {
+			return candidate
+		}
+
+		// A neighbouring application bundle. Only reachable on macOS, and only
+		// when the running binary is itself inside one, so an ordinary
+		// directory of binaries still resolves above and never gets here.
+		if candidate := f.siblingBundle(dir, name); candidate != "" {
 			return candidate
 		}
 	}
 
-	if p, err := exec.LookPath(name); err == nil {
+	if p, err := f.lookPath(name); err == nil {
 		if abs, err := filepath.Abs(p); err == nil {
 			return abs
 		}
 		return p
 	}
 	return ""
+}
+
+// siblingBundle looks for name inside another .app sitting alongside the bundle
+// that dir belongs to.
+//
+// dir is the directory holding the running executable. When it looks like
+// <anything>.app/Contents/MacOS, the directory three levels up is where the
+// installer put the bundles, so the companion is at
+// <that>/<bundle for name>.app/Contents/MacOS/<name>.
+func (f finder) siblingBundle(dir, name string) string {
+	if f.goos != "darwin" {
+		return ""
+	}
+	bundle, ok := darwinBundles[name]
+	if !ok {
+		return ""
+	}
+	root, ok := bundleRoot(dir)
+	if !ok {
+		return ""
+	}
+	candidate := filepath.Join(filepath.Dir(root), bundle+".app", bundleSuffix, name)
+	if f.isExec(candidate) {
+		return candidate
+	}
+	return ""
+}
+
+// bundleRoot reports the .app directory containing dir, when dir is a bundle's
+// Contents/MacOS.
+func bundleRoot(dir string) (string, bool) {
+	macos := filepath.Clean(dir)
+	if filepath.Base(macos) != "MacOS" {
+		return "", false
+	}
+	contents := filepath.Dir(macos)
+	if filepath.Base(contents) != "Contents" {
+		return "", false
+	}
+	root := filepath.Dir(contents)
+	if !strings.HasSuffix(root, ".app") {
+		return "", false
+	}
+	return root, true
 }
 
 func isExecutableFile(path string) bool {

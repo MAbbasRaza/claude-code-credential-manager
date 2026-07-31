@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -18,6 +17,7 @@ import (
 
 	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/autostart"
 	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/icon"
+	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/locate"
 	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/manager"
 )
 
@@ -119,7 +119,13 @@ func rebuild() {
 
 	// A checkbox rather than a plain item, so the current state is visible
 	// without opening anything else.
-	if self, err := os.Executable(); err == nil {
+	//
+	// The path comes from locate rather than os.Executable so this registers
+	// exactly what `ccm autostart enable` would. They differ when the tray was
+	// started through a symlink, which is how the macOS package installs it:
+	// the raw value would record the link, and the two surfaces would then
+	// disagree about what is registered.
+	if self := locate.Executable(locate.Tray); self != "" {
 		on, _ := autostart.IsEnabled(autostartName)
 		boot := systray.AddMenuItemCheckbox("Start at login", "Run the tray app when you log in", on)
 		go onClick(boot.ClickedCh, func() { toggleAutostart(self, boot) })
@@ -179,25 +185,17 @@ func capturePrompt() {
 	rebuild()
 }
 
-// guiPath locates the desktop app beside this executable, returning empty when
-// it is not installed. Looking next to ourselves rather than on PATH keeps a
-// portable, unzipped-anywhere install working.
+// guiPath locates the desktop app, returning empty when it is not installed.
+//
+// Delegates to internal/locate rather than looking itself. The copy that used
+// to live here had two defects the shared implementation does not: it never
+// resolved symlinks, so a tray started through a symlinked entry point searched
+// the link's directory instead of the real one, and it accepted any directory
+// entry, so a directory named ccm-gui was handed to exec and failed at launch
+// with a message the user could do nothing about. It also could not see across
+// the two application bundles the macOS package installs.
 func guiPath() string {
-	name := "ccm-gui"
-	if runtime.GOOS == "windows" {
-		name += ".exe"
-	}
-
-	if self, err := os.Executable(); err == nil {
-		candidate := filepath.Join(filepath.Dir(self), name)
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate
-		}
-	}
-	if p, err := exec.LookPath(name); err == nil {
-		return p
-	}
-	return ""
+	return locate.Executable(locate.GUI)
 }
 
 func openGUI() {
