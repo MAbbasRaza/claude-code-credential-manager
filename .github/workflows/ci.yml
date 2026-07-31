@@ -194,6 +194,173 @@ jobs:
           if-no-files-found: error
 
   # ---------------------------------------------------------------------------
+  # Packaging smoke tests. Run on every push and publish nothing.
+  #
+  # The release packaging jobs only run on a tag, so without these the first
+  # time anyone learns that build-pkg.sh has a typo or that a dependency name
+  # changed is during a release. This workflow already makes that argument for
+  # the Intel cross-compile: discovering it during a release is discovering it
+  # too late. Packaging is worse, because the failure is not a compile error
+  # but an installer that builds and then does the wrong thing.
+  #
+  # They call exactly the scripts the release jobs call, so the only thing
+  # duplicated is the YAML around them.
+  # ---------------------------------------------------------------------------
+
+  package-smoke-linux:
+    name: package smoke (deb)
+    needs: [check]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Install GUI dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libayatana-appindicator3-dev libgtk-3-dev libwebkit2gtk-4.1-dev
+          pc=/usr/lib/x86_64-linux-gnu/pkgconfig
+          for lib in webkit2gtk javascriptcoregtk; do
+            if [ ! -f "$pc/${lib}-4.0.pc" ] && [ -f "$pc/${lib}-4.1.pc" ]; then
+              sudo ln -s "$pc/${lib}-4.1.pc" "$pc/${lib}-4.0.pc"
+            fi
+          done
+
+      - name: Build binaries and the package
+        run: |
+          mkdir -p bin
+          CGO_ENABLED=0 go build -o bin/ccm      ./cmd/ccm
+          CGO_ENABLED=1 go build -o bin/ccm-tray ./cmd/ccm-tray
+          CGO_ENABLED=1 go build -o bin/ccm-gui  ./cmd/ccm-gui
+          CCM_SRCDIR=bin CCM_OUTDIR=dist sh packaging/linux/build-deb.sh
+
+      - name: Install on a clean Ubuntu and verify
+        run: |
+          docker run --rm -v "$PWD/dist:/out:ro" ubuntu:24.04 bash -c '
+            set -eu
+            export DEBIAN_FRONTEND=noninteractive
+            for lib in libgtk-3-0t64 libwebkit2gtk-4.1-0 libayatana-appindicator3-1; do
+              if dpkg -s "$lib" >/dev/null 2>&1; then
+                echo "::error::$lib is already installed; this check proves nothing"; exit 1
+              fi
+            done
+            apt-get update -qq
+            apt-get install -y -qq desktop-file-utils >/dev/null
+            apt-get install -y /out/ccm-linux-amd64.deb
+            ccm --version
+            desktop-file-validate /usr/share/applications/ccm.desktop
+            desktop-file-validate /usr/share/applications/ccm-tray.desktop
+            ccm autostart status | grep -q "/usr/bin/ccm-tray"
+            for p in ccm-tray ccm-gui; do
+              if ldd "/usr/bin/$p" | grep "not found"; then
+                echo "::error::$p has unresolved shared libraries"; exit 1
+              fi
+            done
+            apt-get purge -y -qq ccm >/dev/null
+            test ! -e /usr/bin/ccm
+          '
+
+  package-smoke-macos:
+    name: package smoke (pkg)
+    needs: [check]
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      # Both slices, so the lipo path and the universal assertion are the same
+      # ones the release job runs rather than a simplified stand-in.
+      - name: Build both architectures
+        run: |
+          mkdir -p bin
+          for prog in ccm ccm-tray ccm-gui; do
+            for arch in arm64 amd64; do
+              case "$arch" in
+                amd64) cflags="-arch x86_64" ;;
+                arm64) cflags="-arch arm64" ;;
+              esac
+              CGO_ENABLED=1 GOARCH="$arch" CGO_CFLAGS="$cflags" CGO_LDFLAGS="$cflags" \
+                go build -o "bin/$prog-darwin-$arch" "./cmd/$prog"
+            done
+          done
+          ls -l bin
+
+      - name: Build the package
+        run: CCM_SRCDIR=bin CCM_OUTDIR=dist sh packaging/macos/build-pkg.sh
+
+      - name: Install, verify, uninstall
+        run: |
+          set -eu
+          sudo installer -pkg dist/ccm-macos.pkg -target /
+          test -L /usr/local/bin/ccm
+          /usr/local/bin/ccm --version
+
+          plutil -extract LSUIElement raw \
+            "/Applications/Claude Code Accounts Menu Bar.app/Contents/Info.plist"
+          if plutil -extract LSUIElement raw \
+               "/Applications/Claude Code Accounts.app/Contents/Info.plist" >/dev/null 2>&1; then
+            echo "::error::the desktop app sets LSUIElement; it would have no Dock icon"
+            exit 1
+          fi
+
+          status="$(/usr/local/bin/ccm autostart status)"
+          echo "$status"
+          echo "$status" | grep -q "/Applications/Claude Code Accounts Menu Bar.app/Contents/MacOS/ccm-tray" || {
+            echo "::error::internal/locate and build-pkg.sh disagree on bundle names"
+            exit 1
+          }
+
+          sudo /usr/local/bin/ccm-uninstall
+          test ! -e "/Applications/Claude Code Accounts.app"
+          test ! -e /usr/local/bin/ccm
+
+  package-smoke-windows:
+    name: package smoke (setup.exe)
+    needs: [check]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Install NSIS
+        run: choco install nsis --version=3.10 -y --no-progress
+
+      - name: Build the installer
+        shell: pwsh
+        run: |
+          ./scripts/build-installer.ps1 -Build -SrcDir bin -OutDir dist `
+            -MakeNsis "C:\Program Files (x86)\NSIS\makensis.exe"
+
+      - name: Install, verify, uninstall
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $target = "$env:RUNNER_TEMP\ccm-smoke"
+          $p = Start-Process -FilePath dist\ccm-setup-windows.exe -ArgumentList '/S',"/D=$target" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "installer exited $($p.ExitCode)" }
+          & "$target\ccm.exe" --version
+          & "$target\ccm.exe" autostart status
+
+          $k = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment')
+          $kind = $k.GetValueKind('Path'); $k.Close()
+          if ($kind -ne [Microsoft.Win32.RegistryValueKind]::ExpandString) {
+            throw "user PATH was downgraded to $kind"
+          }
+
+          Start-Process -FilePath "$target\uninstall.exe" -ArgumentList '/S' -Wait
+          Start-Sleep -Seconds 5
+          if (Test-Path "$target\ccm.exe") { throw 'uninstall left the executables behind' }
+
+  # ---------------------------------------------------------------------------
   # Release. Runs only for v* tags.
   #
   # Third-party actions are deliberately avoided in these jobs. For a tool that
@@ -735,8 +902,34 @@ jobs:
           {
             echo "## Install"
             echo
-            echo "Download the binary for your platform, verify it against \`SHA256SUMS\`, rename it"
-            echo "to \`ccm\` (or \`ccm.exe\`), and put it on your \`PATH\`."
+            echo "| Platform | Download | Notes |"
+            echo "|---|---|---|"
+            echo "| Windows | \`ccm-setup-windows.exe\` | Per-user, no administrator rights |"
+            echo "| macOS | \`ccm-macos.pkg\` | Installs into /Applications; asks for your password |"
+            echo "| Ubuntu, Debian | \`ccm-linux-amd64.deb\` | \`sudo apt install ./ccm-linux-amd64.deb\` |"
+            echo
+            echo "Each installs the command line tool, the desktop app and the tray app, and"
+            echo "adds \`ccm\` to your \`PATH\`. Run \`ccm init\` once afterwards to pin your"
+            echo "Claude Code config directory."
+            echo
+            echo "### These builds are not signed yet"
+            echo
+            echo "Both operating systems will warn about that, and the warning is expected."
+            echo "Verify the download against \`SHA256SUMS\` instead of trusting the publisher name."
+            echo
+            echo "**macOS** refuses to open an unsigned package from Finder. Install it from"
+            echo "Terminal:"
+            echo '```'
+            echo "sudo installer -pkg ~/Downloads/ccm-macos.pkg -target /"
+            echo '```'
+            echo
+            echo "**Windows** shows \"Windows protected your PC\". Choose **More info**, then"
+            echo "**Run anyway**."
+            echo
+            echo "### Single binary"
+            echo
+            echo "If you only want the CLI, download the file for your platform, verify it,"
+            echo "rename it to \`ccm\` (or \`ccm.exe\`) and put it on your \`PATH\`."
             echo
             echo '```'
             echo "sha256sum -c SHA256SUMS --ignore-missing"
@@ -744,12 +937,14 @@ jobs:
             echo
             echo "On macOS and Linux, mark it executable: \`chmod +x ccm\`."
             echo
-            echo "Then run \`ccm init\` once to pin your Claude Code config directory."
+            echo "\`ccm-tray\` and \`ccm-gui\` need cgo and ship only for linux/amd64,"
+            echo "darwin/amd64, darwin/arm64 and windows/amd64. Other platforms can build them"
+            echo "from source."
             echo
-            echo "### Tray app"
+            echo "### Uninstall"
             echo
-            echo "\`ccm-tray\` requires cgo and ships only for linux/amd64, darwin/arm64 and"
-            echo "windows/amd64. Other platforms can build it from source."
+            echo "Windows: Settings > Apps. macOS: \`sudo ccm-uninstall\`. Debian: \`sudo apt remove ccm\`."
+            echo "All three keep your saved accounts."
             echo
             echo "### VS Code extension"
             echo
