@@ -560,7 +560,7 @@ jobs:
           cache: true
 
       - name: Collect Windows binaries
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: staging
           pattern: '*-windows-amd64'
@@ -646,7 +646,7 @@ jobs:
       # programs for linux/amd64 alone. A CLI-only arm64 package would install
       # menu entries for applications it does not ship.
       - name: Collect Linux binaries
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: staging
           pattern: '*-linux-amd64'
@@ -737,7 +737,7 @@ jobs:
           cache: true
 
       - name: Collect macOS binaries
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: staging
           pattern: '*-darwin-*'
@@ -879,7 +879,7 @@ jobs:
           cache: true
 
       - name: Collect build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: staging
 
