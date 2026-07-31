@@ -21,6 +21,19 @@ All notable changes to this project are documented here. The format follows
   - **Ubuntu and Debian** `ccm-linux-amd64.deb`, with application menu entries, icons at every
     hicolor size, and a dependency list so apt installs the GTK and WebKit libraries the two cgo
     programs need.
+- **Desktop and application menu shortcuts are now selectable, and changeable after install.** The
+  Windows components page gained a Shortcuts group with Start Menu and Desktop entries alongside
+  the existing start-at-login option, all ticked by default. Options that depend on something else
+  grey out when it is deselected, instead of silently creating a shortcut to a program that was
+  never installed.
+- `ccm shortcut status|add|remove [desktop|menu|all]`, and matching checkboxes in the desktop app's
+  Settings. These work on every platform and after any install method, not only through the Windows
+  wizard, and they read the current state back from disk rather than remembering it, so a shortcut
+  deleted by hand shows as absent.
+- `internal/shortcut`, which is why the above is possible at all. The installer could have called
+  NSIS `CreateShortcut` in two fewer lines, but then nothing else could have told whether a
+  shortcut existed or removed it. This follows the rule start-at-login already set: one
+  implementation, and the installer delegates to it.
 - Two application bundles on macOS rather than one. macOS derives an application's identity by
   walking up from the executable path, so every binary in one bundle shares its `Info.plist`, and
   a single plist cannot both set `LSUIElement` and not set it. The menu bar app needs it; the
@@ -49,6 +62,11 @@ All notable changes to this project are documented here. The format follows
   `ccm autostart enable` would rather than disagreeing with it through a symlink.
 - The release notes told users to download a loose binary and put it on their `PATH`, and listed a
   set of tray platforms that had been missing darwin/amd64 since Intel Mac support was added.
+- Linux desktop entries quoted `Name` and `Comment`. Quoting only means anything inside `Exec`,
+  where the value is parsed into arguments; elsewhere a quote is a literal character, so the
+  application menu would have shown `"Claude Code Accounts"` with the quotation marks visible.
+  `desktop-file-validate` accepts it without complaint, because quotes are legal there, so the
+  first Ubuntu run passed while producing exactly that.
 
 ### Notes
 

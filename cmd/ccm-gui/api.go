@@ -12,6 +12,7 @@ import (
 	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/locate"
 	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/manager"
 	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/proc"
+	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/shortcut"
 )
 
 // api is everything the page can call.
@@ -286,6 +287,14 @@ type Settings struct {
 	Autostart          bool   `json:"autostart"`
 	AutostartAvailable bool   `json:"autostartAvailable"`
 	AutostartMechanism string `json:"autostartMechanism"`
+
+	// Shortcuts are read from the filesystem for the same reason, so a
+	// shortcut the user deleted in Explorer or Finder shows as unticked here
+	// rather than as whatever was last set.
+	DesktopShortcut   bool `json:"desktopShortcut"`
+	MenuShortcut      bool `json:"menuShortcut"`
+	MenuSupported     bool `json:"menuSupported"`
+	ShortcutAvailable bool `json:"shortcutAvailable"`
 }
 
 func (a *api) SettingsGet() (Settings, error) {
@@ -302,6 +311,10 @@ func (a *api) SettingsGet() (Settings, error) {
 	// usable and the checkbox will simply show unticked.
 	on, _ := autostart.IsEnabled(autostartName)
 
+	desk, _ := shortcut.Exists(shortcut.Desktop, shortcut.AppName)
+	menu, _ := shortcut.Exists(shortcut.Menu, shortcut.AppName)
+	_, shortcutErr := shortcut.ForDesktopApp()
+
 	return Settings{
 		ClaudeConfigDir:       s.ClaudeConfigDir,
 		CredentialsBackend:    backend,
@@ -311,7 +324,42 @@ func (a *api) SettingsGet() (Settings, error) {
 		Autostart:          on,
 		AutostartAvailable: locate.Executable(locate.Tray) != "",
 		AutostartMechanism: autostart.Mechanism(),
+
+		DesktopShortcut: desk,
+		MenuShortcut:    menu,
+		MenuSupported:   shortcut.Supported(shortcut.Menu),
+		// The desktop app is the thing a shortcut opens. This binary is it, so
+		// the only way this fails is a copy that cannot locate itself.
+		ShortcutAvailable: shortcutErr == nil,
 	}, nil
+}
+
+// ShortcutSet creates or removes a shortcut.
+//
+// Separate from SettingsSet for the same reason AutostartSet is: it writes to
+// the filesystem rather than the settings file, and it can fail on its own
+// terms without the rest of the dialog being unusable.
+func (a *api) ShortcutSet(kind string, enabled bool) error {
+	k := shortcut.Kind(kind)
+	if !enabled {
+		for _, name := range shortcut.NamesFor(k) {
+			if err := shortcut.Remove(k, name); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	entries, err := shortcut.EntriesFor(k)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		if err := shortcut.Add(k, e); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // autostartName must match what the CLI registers, or the two would each

@@ -102,6 +102,8 @@ func run(args []string) error {
 		return cmdConfig(g, rest[1:])
 	case "autostart":
 		return cmdAutostart(g, rest[1:])
+	case "shortcut", "shortcuts":
+		return cmdShortcut(g, rest[1:])
 	case "doctor":
 		return cmdDoctor(g)
 	default:
@@ -126,6 +128,8 @@ USAGE
   ccm config get|set|path        read or change ccm's own settings
   ccm autostart status|enable|disable
                                  start the tray app when you log in
+  ccm shortcut status|add|remove [desktop|menu|all]
+                                 desktop and application menu shortcuts
   ccm doctor                     diagnose path resolution and vault health
 
 FLAGS

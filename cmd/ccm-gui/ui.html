@@ -456,6 +456,19 @@ async function showSettings() {
       ? "Registered with " + esc(s.autostartMechanism) + "."
       : "Unavailable: the tray app is not installed, so there would be nothing to start.") +
     "</div>" +
+    '<label><input type="checkbox" id="s-desk" style="width:auto;margin-right:8px"' +
+    (s.shortcutAvailable ? "" : " disabled") + ">Desktop shortcut</label>" +
+    (s.menuSupported
+      ? '<label><input type="checkbox" id="s-menu" style="width:auto;margin-right:8px"' +
+        (s.shortcutAvailable ? "" : " disabled") + ">Add to the applications menu</label>"
+      : "") +
+    '<div class="hint">' +
+    (s.menuSupported
+      ? "Tick or untick these at any time; they are read back from disk, so a shortcut you " +
+        "delete yourself shows here as unticked."
+      : "macOS has no separate applications menu: this app already appears in Launchpad and " +
+        "Spotlight because it lives in /Applications.") +
+    "</div>" +
     '<div class="hint">' + esc(s.settingsPath) + "</div>",
     [
       { label: "Cancel", onClick: closeModal },
@@ -468,6 +481,14 @@ async function showSettings() {
             if ($("s-boot").checked !== s.autostart) {
               await window.goAutostartSet($("s-boot").checked);
             }
+            // Likewise applied only on change, so saving an unrelated setting
+            // never rewrites a shortcut the user had already positioned.
+            if ($("s-desk").checked !== s.desktopShortcut) {
+              await window.goShortcutSet("desktop", $("s-desk").checked);
+            }
+            if (s.menuSupported && $("s-menu").checked !== s.menuShortcut) {
+              await window.goShortcutSet("menu", $("s-menu").checked);
+            }
           } catch (e) { modalError(errText(e)); return; }
           closeModal(); await refresh(); toast("Settings saved");
         } }
@@ -475,6 +496,8 @@ async function showSettings() {
   $("s-backend").value = s.credentialsBackend;
   $("s-guard").checked = s.requireClosedSessions;
   $("s-boot").checked = s.autostart;
+  $("s-desk").checked = s.desktopShortcut;
+  if (s.menuSupported) $("s-menu").checked = s.menuShortcut;
 }
 
 /* ---------------- wiring ---------------- */

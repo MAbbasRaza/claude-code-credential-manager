@@ -114,6 +114,31 @@ func (f finder) find(name string) string {
 	return ""
 }
 
+// AppBundle returns the macOS application bundle carrying a program, or an
+// empty string when there is none: on other platforms, or when the program is
+// installed as a loose binary rather than from the package.
+//
+// A desktop shortcut has to point at the bundle rather than the executable
+// inside it. Opening the bundle goes through LaunchServices, which gives the
+// process its icon, its name in the menu bar and its Info.plist; opening the
+// inner binary directly gets none of that.
+func AppBundle(name string) string { return realFinder().appBundle(name) }
+
+func (f finder) appBundle(name string) string {
+	if f.goos != "darwin" {
+		return ""
+	}
+	exe := f.find(name)
+	if exe == "" {
+		return ""
+	}
+	root, ok := bundleRoot(filepath.Dir(exe))
+	if !ok {
+		return ""
+	}
+	return root
+}
+
 // siblingBundle looks for name inside another .app sitting alongside the bundle
 // that dir belongs to.
 //

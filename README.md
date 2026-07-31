@@ -86,6 +86,11 @@ your `PATH`.
 | macOS | `ccm-macos.pkg` | Installs into `/Applications`. Asks for your password. |
 | Ubuntu, Debian | `ccm-linux-amd64.deb` | `sudo apt install ./ccm-linux-amd64.deb` |
 
+The Windows installer lets you pick which parts you want: the desktop app, the tray app, Start
+Menu shortcuts, a desktop shortcut, and whether the tray starts at login. All are on by default.
+Everything except the two programs themselves can also be changed afterwards, on any platform,
+from the desktop app's Settings or with `ccm shortcut` and `ccm autostart`.
+
 > **These builds are not signed yet, and both operating systems will say so.** That warning is
 > expected. Verify the download against `SHA256SUMS` rather than trusting a publisher name.
 >
@@ -227,6 +232,10 @@ ccm rename <old> <new>         rename a profile, keeping its credentials
 ccm rm <profile>               remove a profile
 ccm status                     show the active account
 ccm config get|set|path        read or change ccm's own settings
+ccm autostart status|enable|disable
+                               start the tray app when you log in
+ccm shortcut status|add|remove [desktop|menu|all]
+                               desktop and application menu shortcuts
 ccm doctor                     diagnose path resolution, permissions and vault health
 
 --config-dir <path>            override the config directory for one run

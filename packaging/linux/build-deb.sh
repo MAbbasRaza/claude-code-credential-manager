@@ -158,10 +158,13 @@ if [ "$1" = "configure" ]; then
         gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor || true
     fi
 
-    # Start-at-login is deliberately NOT registered here. dpkg runs as root
-    # and the XDG autostart entry is per-user, so there is no correct user to
-    # register for. `ccm autostart enable` does it, and so does the desktop
-    # app's Settings.
+    # Start-at-login and a desktop shortcut are deliberately NOT created here.
+    # dpkg runs as root while both are per-user, so there is no correct user to
+    # create them for. `ccm autostart enable` and `ccm shortcut add` do it, and
+    # so does the desktop app's Settings.
+    #
+    # The application menu entries above are different: they are system-wide by
+    # nature, which is why the package can ship them directly.
     :
 fi
 exit 0
@@ -181,9 +184,11 @@ if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
     fi
 fi
 
-# The vault and settings under the user's home are left alone, even on purge.
-# They hold saved accounts, and destroying them would force a browser sign-in
-# for every one. dpkg has no business reaching into home directories anyway.
+# Per-user state is left alone, even on purge. That covers the vault and
+# settings, which hold saved accounts whose loss would force a browser sign-in
+# for every one, and also any desktop shortcut or autostart entry, which live in
+# home directories dpkg has no business reaching into. `ccm shortcut remove`
+# clears those, and they are inert once the binaries are gone in any case.
 exit 0
 EOF
 chmod 0755 "$ROOT/DEBIAN/postrm"

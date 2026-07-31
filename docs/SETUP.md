@@ -17,9 +17,35 @@ run it. Each installs the `ccm` command, the desktop app and the tray app togeth
 | macOS | `ccm-macos.pkg` | Installs two apps into `/Applications` and `ccm` into `/usr/local/bin`. Asks for your password. |
 | Ubuntu, Debian | `ccm-linux-amd64.deb` | `sudo apt install ./ccm-linux-amd64.deb`. Adds both apps to your application menu. |
 
-On the Windows components page you can untick the desktop app or the tray app; the command line
-tool is always installed. Unticking the tray app also disables the start-at-login option, since
-that option starts the tray.
+The Windows installer's components page lets you choose what you get. Everything is ticked by
+default:
+
+| Option | What it does |
+|---|---|
+| Command line tool | Always installed, and added to your `PATH` |
+| Desktop app | The window for managing accounts |
+| System tray app | The tray icon for switching without opening anything |
+| Shortcuts > Start Menu | Entries for the desktop app and the tray app |
+| Shortcuts > Desktop shortcut | An icon on your desktop for the desktop app |
+| Start the tray app when I log in | Registers the tray to run at login |
+
+Options that depend on something else are unticked and greyed out when that thing is deselected,
+rather than silently creating a shortcut to a program that was never installed. Deselect the tray
+app and start-at-login goes with it; deselect the desktop app and the desktop shortcut goes too.
+
+**You can change any of these later**, from the desktop app's Settings or from the command line,
+and on every platform rather than only through the Windows installer:
+
+```bash
+ccm shortcut status              # what exists now, and where
+ccm shortcut add                 # desktop and application menu
+ccm shortcut add desktop         # just one of them
+ccm shortcut remove menu
+ccm autostart enable             # or: disable, status
+```
+
+They are read back from disk rather than remembered, so a shortcut you delete yourself shows as
+absent the next time you look.
 
 ### First launch on an unsigned build
 

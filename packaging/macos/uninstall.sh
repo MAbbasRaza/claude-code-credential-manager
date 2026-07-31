@@ -31,6 +31,14 @@ if [ -n "$console_user" ] && [ "$console_user" != "root" ]; then
         su - "$console_user" -c "launchctl unload -w '$plist'" >/dev/null 2>&1 || true
         rm -f "$plist"
     fi
+
+    # Same reasoning for a desktop shortcut: it is per-user and would be left
+    # pointing at a bundle that is about to be deleted. Done through ccm while
+    # it still exists, so there is one implementation of where a shortcut lives.
+    if [ -x /usr/local/bin/ccm ]; then
+        su - "$console_user" -c "/usr/local/bin/ccm shortcut remove" >/dev/null 2>&1 || true
+    fi
+    rm -f "/Users/$console_user/Desktop/Claude Code Accounts"
 fi
 
 # A running app holds its bundle open.

@@ -2,12 +2,15 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/MAbbasRaza/claude-code-multi-account-manager/internal/shortcut"
 )
 
 // The GUI is the least-covered surface in the project and it handles OAuth
@@ -390,6 +393,37 @@ func TestSettingsRejectsBadInput(t *testing.T) {
 	}
 }
 
+// Turning a shortcut off has to work when the desktop app cannot be found,
+// because that is exactly the state an uninstall leaves: the executables are
+// gone and the shortcuts pointing at them still need clearing. Turning one on
+// in the same state must fail loudly instead of writing a link to nothing.
+func TestShortcutSetRemovesWithoutTheDesktopApp(t *testing.T) {
+	root := t.TempDir()
+	switch runtime.GOOS {
+	case "windows":
+		t.Setenv("USERPROFILE", root)
+		t.Setenv("APPDATA", filepath.Join(root, "AppData", "Roaming"))
+	default:
+		t.Setenv("HOME", root)
+		t.Setenv("XDG_DESKTOP_DIR", filepath.Join(root, "Desktop"))
+		t.Setenv("XDG_DATA_HOME", filepath.Join(root, ".local", "share"))
+	}
+
+	a := &api{}
+
+	// The test binary has no ccm-gui beside it, so the app is not locatable.
+	if err := a.ShortcutSet("desktop", false); err != nil {
+		t.Errorf("removing a shortcut with no desktop app installed should succeed, got %v", err)
+	}
+
+	err := a.ShortcutSet("desktop", true)
+	if err == nil {
+		t.Error("adding a shortcut with no desktop app installed should fail")
+	} else if !errors.Is(err, shortcut.ErrNoDesktopApp) {
+		t.Errorf("got %v, want ErrNoDesktopApp", err)
+	}
+}
+
 // A mismatch between a Go json tag and the property ui.html reads renders a
 // blank field with no error anywhere. This pins the contract from both sides.
 func TestJSONContractMatchesThePage(t *testing.T) {
@@ -424,7 +458,11 @@ func TestJSONContractMatchesThePage(t *testing.T) {
 		"switched", "to", "toEmail", "capturedAs", "newProfile",
 		"blocked", "blockedCount", "blockedPids", "undetermined", "message",
 	})
-	check("Settings", Settings{}, []string{"claudeConfigDir", "credentialsBackend", "requireClosedSessions", "settingsPath"})
+	check("Settings", Settings{}, []string{
+		"claudeConfigDir", "credentialsBackend", "requireClosedSessions", "settingsPath",
+		"autostart", "autostartAvailable", "autostartMechanism",
+		"desktopShortcut", "menuShortcut", "menuSupported", "shortcutAvailable",
+	})
 
 	// And the reverse direction: every goX function the page calls must be
 	// bound in main.go, or the call rejects with "not a function" at runtime.

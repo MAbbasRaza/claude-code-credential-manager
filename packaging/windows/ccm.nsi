@@ -254,21 +254,46 @@ SectionEnd
 Section "Desktop app" SecGui
   SetOutPath "$INSTDIR"
   File "${SRCDIR}\ccm-gui.exe"
-  CreateDirectory "$SMPROGRAMS\${APPNAME}"
-  CreateShortcut "$SMPROGRAMS\${APPNAME}\Claude Code Accounts.lnk" "$INSTDIR\ccm-gui.exe"
 SectionEnd
 
 Section "System tray app" SecTray
   SetOutPath "$INSTDIR"
   File "${SRCDIR}\ccm-tray.exe"
-  CreateDirectory "$SMPROGRAMS\${APPNAME}"
-  CreateShortcut "$SMPROGRAMS\${APPNAME}\Claude Code Accounts (tray).lnk" "$INSTDIR\ccm-tray.exe"
 SectionEnd
 
+; ---------------------------------------------------------------------------
+; Integration options
+;
+; Every one of these delegates to ccm rather than doing the work here, which is
+; the same rule start-at-login already followed: one implementation of what each
+; option means, so the app's own settings read back exactly what the installer
+; wrote and can undo it. CreateShortcut would have been fewer lines and would
+; have left the desktop app unable to tell whether a shortcut existed.
+; ---------------------------------------------------------------------------
+
+SectionGroup /e "Shortcuts" SecShortcuts
+
+  Section "Start Menu" SecMenu
+    DetailPrint "Creating Start Menu shortcuts"
+    nsExec::ExecToLog '"$INSTDIR\ccm.exe" shortcut add menu'
+    Pop $0
+    ${If} $0 != 0
+      DetailPrint "Could not create Start Menu shortcuts (exit $0)."
+    ${EndIf}
+  SectionEnd
+
+  Section "Desktop shortcut" SecDesk
+    DetailPrint "Creating a desktop shortcut"
+    nsExec::ExecToLog '"$INSTDIR\ccm.exe" shortcut add desktop'
+    Pop $0
+    ${If} $0 != 0
+      DetailPrint "Could not create the desktop shortcut (exit $0)."
+    ${EndIf}
+  SectionEnd
+
+SectionGroupEnd
+
 Section "Start the tray app when I log in" SecBoot
-  ; Delegated to ccm rather than written here, so there is one implementation
-  ; of what "start at login" means and the app's own toggle reads back exactly
-  ; what the installer wrote.
   DetailPrint "Registering start at login"
   nsExec::ExecToLog '"$INSTDIR\ccm.exe" autostart enable'
   Pop $0
@@ -277,26 +302,50 @@ Section "Start the tray app when I log in" SecBoot
   ${EndIf}
 SectionEnd
 
-; Selected by default; the user can untick either on the components page.
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
   !insertmacro MUI_DESCRIPTION_TEXT ${SecCore} "The ccm command, added to your PATH."
   !insertmacro MUI_DESCRIPTION_TEXT ${SecGui}  "A window for managing accounts: switch, capture, rename, remove."
   !insertmacro MUI_DESCRIPTION_TEXT ${SecTray} "A tray icon for switching without opening anything."
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecMenu} "Shortcuts in your Start Menu for the desktop app and the tray app."
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecDesk} "A shortcut to the desktop app on your desktop."
   !insertmacro MUI_DESCRIPTION_TEXT ${SecBoot} "Runs the tray app at login so switching is always available. You can change this later in Settings."
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
 
 Function .onInit
-  ; Start at login depends on the tray, so it cannot be on without it.
-  ; Enforced in .onSelChange rather than merely documented.
+  ; All four integration options start ticked; the components page is where a
+  ; user turns any of them off.
+  SectionSetFlags ${SecMenu} ${SF_SELECTED}
+  SectionSetFlags ${SecDesk} ${SF_SELECTED}
   SectionSetFlags ${SecBoot} ${SF_SELECTED}
 FunctionEnd
 
+; Dependencies enforced rather than merely documented, because each of these
+; would otherwise produce a shortcut to a program that was never installed.
 Function .onSelChange
+  ; Start at login runs the tray, so it cannot outlive it.
   ${IfNot} ${SectionIsSelected} ${SecTray}
     !insertmacro UnselectSection ${SecBoot}
     SectionSetFlags ${SecBoot} ${SF_RO}
   ${Else}
     SectionSetFlags ${SecBoot} 0
+  ${EndIf}
+
+  ; A desktop shortcut opens the desktop app, so without it there is nothing
+  ; to point at. The Start Menu group would still hold the tray entry, so it
+  ; only goes away when neither app is installed.
+  ${IfNot} ${SectionIsSelected} ${SecGui}
+    !insertmacro UnselectSection ${SecDesk}
+    SectionSetFlags ${SecDesk} ${SF_RO}
+  ${Else}
+    SectionSetFlags ${SecDesk} 0
+  ${EndIf}
+
+  ${If} ${SectionIsSelected} ${SecGui}
+  ${OrIf} ${SectionIsSelected} ${SecTray}
+    SectionSetFlags ${SecMenu} 0
+  ${Else}
+    !insertmacro UnselectSection ${SecMenu}
+    SectionSetFlags ${SecMenu} ${SF_RO}
   ${EndIf}
 FunctionEnd
 
@@ -305,8 +354,13 @@ FunctionEnd
 ; ---------------------------------------------------------------------------
 
 Section "Uninstall"
-  ; Before deleting the binary that implements it.
+  ; Both run before the binary that implements them is deleted, and both go
+  ; through ccm for the same reason the install side does: it knows where it
+  ; put things, including the localised desktop directory, which this script
+  ; would have to guess at.
   nsExec::ExecToLog '"$INSTDIR\ccm.exe" autostart disable'
+  Pop $0
+  nsExec::ExecToLog '"$INSTDIR\ccm.exe" shortcut remove'
   Pop $0
 
   ; A running tray or app holds its own exe open, so a delete would fail.
@@ -321,9 +375,13 @@ Section "Uninstall"
   Delete "$INSTDIR\uninstall.exe"
   RMDir "$INSTDIR"
 
+  ; Belt and braces for anything `ccm shortcut remove` could not reach, such as
+  ; an install whose ccm.exe was already gone. Deleting a shortcut that is not
+  ; there is not an error in NSIS.
   Delete "$SMPROGRAMS\${APPNAME}\Claude Code Accounts.lnk"
   Delete "$SMPROGRAMS\${APPNAME}\Claude Code Accounts (tray).lnk"
   RMDir "$SMPROGRAMS\${APPNAME}"
+  Delete "$DESKTOP\Claude Code Accounts.lnk"
 
   Call un.RemoveFromPath
 
