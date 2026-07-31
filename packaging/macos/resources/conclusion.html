@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="font-family: -apple-system, sans-serif; font-size: 13px; line-height: 1.5;">
+
+<p><b>Installed.</b> Open <b>Claude Code Accounts</b> from your Applications
+folder, or run <code>ccm</code> in a Terminal.</p>
+
+<p><b>Adding your first account</b></p>
+
+<p>Your accounts are added by capturing the one you are already signed into:</p>
+
+<pre style="background:#f4f4f2; padding:8px; border-radius:4px;">ccm add work</pre>
+
+<p>Then sign into your other account in Claude Code as usual and run
+<code>ccm add personal</code>. After that, <code>ccm use work</code> switches
+back with no browser involved.</p>
+
+<p><b>Capture an account before you sign out of it.</b> Signing out destroys the
+refresh token, and nothing can recover it afterwards except signing in again.</p>
+
+<p><b>Start at login</b> is not switched on by this installer, because the
+installer runs as the system rather than as you. Turn it on from the desktop
+app's Settings, or run:</p>
+
+<pre style="background:#f4f4f2; padding:8px; border-radius:4px;">ccm autostart enable</pre>
+
+<p><b>To uninstall</b>, run <code>sudo ccm-uninstall</code>. Your saved accounts
+are kept unless you remove them yourself.</p>
+
+</body>
+</html>

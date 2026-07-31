@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="font-family: -apple-system, sans-serif; font-size: 13px; line-height: 1.5;">
+
+<p>This installs <b>Claude Code Accounts</b>, a tool for switching between
+Claude Code accounts without signing in again.</p>
+
+<p>Claude Code stores one account's credentials at a time. Signing into a second
+account destroys the first account's refresh token, so going back means a full
+browser sign-in. This keeps each account's credentials in a protected vault and
+swaps them back on demand, which makes switching an offline, one-second
+operation.</p>
+
+<p><b>What gets installed</b></p>
+
+<ul>
+  <li><b>Claude Code Accounts</b> in your Applications folder, a window for
+      adding, switching, renaming and removing accounts.</li>
+  <li><b>ccm</b>, the command line tool, available in any Terminal.</li>
+  <li><b>Claude Code Accounts Menu Bar</b>, an optional menu bar icon for
+      switching without opening anything. You can leave this out on the next
+      screen.</li>
+</ul>
+
+<p>An administrator password is required, because these install into
+/Applications for every user on this Mac.</p>
+
+<p><b>Your existing Claude Code setup is not touched.</b> Only the two
+account-scoped keys move during a switch; MCP server logins, project history
+and settings are left exactly as they are.</p>
+
+</body>
+</html>

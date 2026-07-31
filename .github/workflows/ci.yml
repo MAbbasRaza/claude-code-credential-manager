@@ -550,10 +550,155 @@ jobs:
           path: dist/ccm-linux-amd64.deb
           if-no-files-found: error
 
+  package-macos:
+    name: macOS installer
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [release-cli, release-tray, release-gui]
+    runs-on: macos-latest
+    # Lifted to job level because the secrets context is NOT available in a
+    # step-level if:. Referenced there it evaluates to an empty string rather
+    # than failing, so every signing step below would quietly stay skipped even
+    # after the credentials were added, and the first sign that anything was
+    # wrong would be users still seeing an unidentified-developer warning.
+    env:
+      HAVE_SIGNING: ${{ secrets.MACOS_CERT_P12 != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Collect macOS binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: staging
+          pattern: '*-darwin-*'
+
+      - name: Flatten the binaries
+        run: |
+          mkdir -p bin
+          find staging -type f -exec cp {} bin/ \;
+          ls -l bin
+
+      # Signing and notarization are wired but inert: every step below is a
+      # no-op until the secrets exist, so the pipeline ships an unsigned
+      # package today and a notarized one the day a Developer ID is added,
+      # with no change to how anything is built.
+      - name: Import the Developer ID certificates
+        if: env.HAVE_SIGNING == 'true'
+        env:
+          CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          keychain="$RUNNER_TEMP/build.keychain"
+          password="$(openssl rand -hex 20)"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 900 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          echo "$CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$keychain" \
+            -P "$CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productsign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain"
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/cert.p12"
+
+      - name: Build the package
+        env:
+          CCM_VERSION: ${{ github.ref_name }}
+          CCM_SRCDIR: bin
+          CCM_OUTDIR: dist
+          MACOS_APP_IDENTITY: ${{ secrets.MACOS_APP_IDENTITY }}
+          MACOS_INSTALLER_IDENTITY: ${{ secrets.MACOS_INSTALLER_IDENTITY }}
+        run: sh packaging/macos/build-pkg.sh
+
+      - name: Notarize and staple
+        if: env.HAVE_SIGNING == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          xcrun notarytool submit dist/ccm-macos.pkg --wait \
+            --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD"
+          xcrun stapler staple dist/ccm-macos.pkg
+          xcrun stapler validate dist/ccm-macos.pkg
+
+      # A thin package installs and then cannot launch on the architecture it
+      # is missing, and the failure surfaces on a user's machine rather than
+      # here. The Intel Mac used for manual verification can only ever produce
+      # an x86_64 slice, so this runner is the only place both are checked.
+      - name: Both architectures must be present
+        run: |
+          pkgutil --expand-full dist/ccm-macos.pkg "$RUNNER_TEMP/expanded"
+          ok=1
+          for prog in \
+            "$RUNNER_TEMP/expanded/gui.pkg/Payload/Applications/Claude Code Accounts.app/Contents/MacOS/ccm-gui" \
+            "$RUNNER_TEMP/expanded/gui.pkg/Payload/Applications/Claude Code Accounts.app/Contents/MacOS/ccm" \
+            "$RUNNER_TEMP/expanded/tray.pkg/Payload/Applications/Claude Code Accounts Menu Bar.app/Contents/MacOS/ccm-tray"
+          do
+            archs="$(lipo -archs "$prog")"
+            echo "$(basename "$prog"): $archs"
+            case "$archs" in
+              *x86_64*arm64*|*arm64*x86_64*) ;;
+              *) echo "::error::$(basename "$prog") is not universal ($archs)"; ok=0 ;;
+            esac
+          done
+          [ "$ok" -eq 1 ]
+
+      # Proves the package installs and that the two bundles can find each
+      # other once installed, which is the only end-to-end check that the
+      # bundle names in internal/locate and in build-pkg.sh actually agree.
+      - name: Install, verify, uninstall
+        run: |
+          set -eu
+          sudo installer -pkg dist/ccm-macos.pkg -target /
+
+          test -d "/Applications/Claude Code Accounts.app"
+          test -d "/Applications/Claude Code Accounts Menu Bar.app"
+          test -L /usr/local/bin/ccm
+
+          /usr/local/bin/ccm --version
+
+          plutil -lint "/Applications/Claude Code Accounts.app/Contents/Info.plist"
+          plutil -lint "/Applications/Claude Code Accounts Menu Bar.app/Contents/Info.plist"
+
+          # The menu bar app must not claim a Dock tile, and the desktop app
+          # must not be hidden from it. This is the whole reason for two
+          # bundles rather than one.
+          plutil -extract LSUIElement raw \
+            "/Applications/Claude Code Accounts Menu Bar.app/Contents/Info.plist"
+          if plutil -extract LSUIElement raw \
+               "/Applications/Claude Code Accounts.app/Contents/Info.plist" >/dev/null 2>&1; then
+            echo "::error::the desktop app sets LSUIElement; it would have no Dock icon"
+            exit 1
+          fi
+
+          # The CLI is reached through a symlink in /usr/local/bin, so this
+          # also exercises the EvalSymlinks step in internal/locate.
+          status="$(/usr/local/bin/ccm autostart status)"
+          echo "$status"
+          echo "$status" | grep -q "/Applications/Claude Code Accounts Menu Bar.app/Contents/MacOS/ccm-tray" || {
+            echo "::error::the CLI cannot find the tray in its bundle; internal/locate and build-pkg.sh disagree on bundle names"
+            exit 1
+          }
+
+          sudo /usr/local/bin/ccm-uninstall
+          test ! -e "/Applications/Claude Code Accounts.app"
+          test ! -e "/Applications/Claude Code Accounts Menu Bar.app"
+          test ! -e /usr/local/bin/ccm
+          echo "install, verify and uninstall all passed"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-macos
+          path: dist/ccm-macos.pkg
+          if-no-files-found: error
+
   publish:
     name: publish release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [release-cli, release-tray, release-gui, package-windows, package-linux]
+    needs: [release-cli, release-tray, release-gui, package-windows, package-linux, package-macos]
     runs-on: ubuntu-latest
     permissions:
       contents: write
