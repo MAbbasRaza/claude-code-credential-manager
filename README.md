@@ -75,6 +75,30 @@ installing the incoming one. This is the single most important thing it does.
 
 ## Install
 
+Download an installer from
+[Releases](https://github.com/MAbbasRaza/claude-code-multi-account-manager/releases/latest) and
+run it. Each one installs the CLI, the desktop app and the tray app together, and puts `ccm` on
+your `PATH`.
+
+| Platform | File | |
+|---|---|---|
+| Windows | `ccm-setup-windows.exe` | Per-user. No administrator rights, no UAC prompt. |
+| macOS | `ccm-macos.pkg` | Installs into `/Applications`. Asks for your password. |
+| Ubuntu, Debian | `ccm-linux-amd64.deb` | `sudo apt install ./ccm-linux-amd64.deb` |
+
+> **These builds are not signed yet, and both operating systems will say so.** That warning is
+> expected. Verify the download against `SHA256SUMS` rather than trusting a publisher name.
+>
+> **macOS** will not open an unsigned package from Finder at all. Install it from Terminal:
+> ```bash
+> sudo installer -pkg ~/Downloads/ccm-macos.pkg -target /
+> ```
+> **Windows** shows *"Windows protected your PC"*. Choose **More info**, then **Run anyway**.
+
+### Command line only
+
+If you just want `ccm` and no desktop apps:
+
 **macOS and Linux**
 
 ```bash
@@ -87,11 +111,13 @@ curl -fsSL https://raw.githubusercontent.com/MAbbasRaza/claude-code-multi-accoun
 irm https://raw.githubusercontent.com/MAbbasRaza/claude-code-multi-account-manager/main/install.ps1 | iex
 ```
 
-Both installers detect your architecture, verify the download against the published
-`SHA256SUMS`, install into your home directory, and tell you how to fix your `PATH` if needed.
-Neither ever asks for `sudo` or administrator rights.
+These two detect your architecture, verify the download against the published `SHA256SUMS`,
+install into your home directory, and tell you how to fix your `PATH` if needed. Unlike the
+macOS and Debian packages above, neither ever asks for `sudo` or administrator rights.
 
-To install the extra surfaces alongside the CLI:
+They can install the extra surfaces too, though as loose binaries rather than real applications:
+on macOS that means no Dock icon and no application identity, which is what `ccm-macos.pkg`
+exists to provide.
 
 ```bash
 CCM_GUI=1 CCM_TRAY=1 curl -fsSL .../install.sh | sh     # macOS, Linux
@@ -152,9 +178,19 @@ code --install-extension ccm-extension.vsix
 
 ### Uninstall
 
-Delete the binary, then remove `~/.config/ccm` and `~/.local/share/ccm` on Linux,
-`~/Library/Application Support/ccm` on macOS, or `%APPDATA%\ccm` and `%LOCALAPPDATA%\ccm` on
-Windows. Nothing is written outside those locations and your own Claude Code config directory.
+| Installed with | Remove with |
+|---|---|
+| `ccm-setup-windows.exe` | Settings > Apps > Claude Code Multi-Account Manager |
+| `ccm-macos.pkg` | `sudo ccm-uninstall` |
+| `ccm-linux-amd64.deb` | `sudo apt remove ccm` |
+| `install.sh`, `install.ps1`, manual | Delete the binaries |
+
+**None of them delete your saved accounts.** That is deliberate: the vault holds the credentials
+for every account you added, and destroying it would force a browser sign-in for each one to
+recover. Remove it yourself if you actually want it gone:
+`~/Library/Application Support/ccm` on macOS, `~/.config/ccm` and `~/.local/share/ccm` on Linux,
+`%APPDATA%\ccm` and `%LOCALAPPDATA%\ccm` on Windows. Nothing is written outside those locations
+and your own Claude Code config directory.
 
 ## Getting started
 

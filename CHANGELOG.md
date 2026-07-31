@@ -6,7 +6,59 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Installers for Windows, macOS and Ubuntu.** Each installs the command line tool, the desktop
+  app and the tray app together and puts `ccm` on the `PATH`, so the desktop programs arrive as
+  real applications instead of loose binaries in a bin directory.
+  - **Windows** `ccm-setup-windows.exe`. The NSIS wizard has existed since it was written and was
+    never built by anything: there was no `makensis` step in the workflow, and the
+    `scripts/build-installer.ps1` its own header referenced had never existed in the tree or in
+    git history. That script now exists and is the single place `makensis` runs.
+  - **macOS** `ccm-macos.pkg`, an Installer.app wizard that puts two application bundles in
+    `/Applications` and the CLI in `/usr/local/bin`. Universal, so one package serves Intel and
+    Apple Silicon. Ships `ccm-uninstall`, because a `.pkg` has no uninstaller of its own.
+  - **Ubuntu and Debian** `ccm-linux-amd64.deb`, with application menu entries, icons at every
+    hicolor size, and a dependency list so apt installs the GTK and WebKit libraries the two cgo
+    programs need.
+- Two application bundles on macOS rather than one. macOS derives an application's identity by
+  walking up from the executable path, so every binary in one bundle shares its `Info.plist`, and
+  a single plist cannot both set `LSUIElement` and not set it. The menu bar app needs it; the
+  desktop app must not have it or it loses its Dock icon and Cmd-Tab entry.
+- `scripts/relver`, shared by the Windows and macOS packaging. `VIProductVersion` requires exactly
+  four numeric parts and `CFBundleShortVersionString` at most three, so a tag like `v0.3.0-rc1`
+  would have failed the Windows build outright and produced a bundle Finder shows with no version.
+- Packaging smoke tests on every push. The release packaging only runs on a tag, so without them
+  the first sign of a broken installer would be a failed release.
+- Signing and notarization wired into the macOS release job but inert, gated on secrets that do
+  not exist yet, so the pipeline ships unsigned today and notarized the day a Developer ID is
+  added.
+
 ### Fixed
+
+- `internal/locate` could not find a sibling program across two macOS application bundles, and the
+  failure was silent by construction: an empty result means "not installed", so a correctly
+  installed Mac would have shown a tray with no "Manage accounts" entry and a `ccm autostart
+  enable` insisting the tray was not installed.
+- `ccm-tray` kept a private copy of the sibling lookup with two defects the shared implementation
+  does not have. It never resolved symlinks, so a tray started through one searched the link's
+  directory; the macOS package installs the CLI as a symlink, so this would have bitten
+  immediately. And it accepted any directory entry, so a directory named `ccm-gui` reached `exec`
+  and failed at launch with a message the user could do nothing about. The tray's start-at-login
+  toggle now takes its path from the same place, so it registers exactly what
+  `ccm autostart enable` would rather than disagreeing with it through a symlink.
+- The release notes told users to download a loose binary and put it on their `PATH`, and listed a
+  set of tray platforms that had been missing darwin/amd64 since Intel Mac support was added.
+
+### Notes
+
+- **The macOS and Debian packages deliberately do not switch on start-at-login; the Windows
+  installer does.** That installer runs as you, while the other two run as root and the entry they
+  would write is per-user, so there is no correct user to register for. Rather than guess, they
+  leave it to `ccm autostart enable` or the desktop app's Settings.
+- **These builds are not signed yet.** macOS will not open the package from Finder at all, so
+  docs/SETUP.md documents the Terminal install, and Windows shows a SmartScreen warning. Verify
+  downloads against `SHA256SUMS` rather than a publisher name.
 
 - **`ccm` could not run at all on macOS from a session without an unlocked login keychain.** The
   vault's data key lives in the Keychain, and `loadKey` is called by both seal and unseal, so

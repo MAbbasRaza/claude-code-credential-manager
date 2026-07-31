@@ -12,10 +12,12 @@ BIN     := bin
 help:
 	@echo "build      build the CLI into $(BIN)/"
 	@echo "tray       build the tray app (needs cgo on macOS and Linux)"
+	@echo "gui        build the desktop app (needs cgo)"
 	@echo "test       run the full Go test suite"
 	@echo "check      gofmt, vet and test; what CI gates on"
 	@echo "fmt        rewrite sources with gofmt"
 	@echo "extension  install deps and compile the VS Code extension"
+	@echo "installer  build the installer for the host platform"
 	@echo "clean      remove build output"
 
 .PHONY: build
@@ -25,6 +27,20 @@ build:
 .PHONY: tray
 tray:
 	$(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN)/ ./cmd/ccm-tray
+
+.PHONY: gui
+gui:
+	$(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN)/ ./cmd/ccm-gui
+
+# Delegates rather than reimplementing. Those scripts are also what CI runs, so
+# a package built here and one published by a release cannot differ.
+.PHONY: installer
+installer: build tray gui
+	@case "$$(uname -s 2>/dev/null || echo Windows)" in \
+		Darwin) CCM_SRCDIR=$(BIN) CCM_OUTDIR=dist sh packaging/macos/build-pkg.sh ;; \
+		Linux)  CCM_SRCDIR=$(BIN) CCM_OUTDIR=dist sh packaging/linux/build-deb.sh ;; \
+		*)      echo "On Windows run: pwsh -File scripts/build-installer.ps1 -Build"; exit 1 ;; \
+	esac
 
 .PHONY: test
 test:
@@ -51,4 +67,4 @@ extension:
 
 .PHONY: clean
 clean:
-	rm -rf $(BIN) extension/out extension/*.vsix
+	rm -rf $(BIN) dist assets/icon.icns extension/out extension/*.vsix

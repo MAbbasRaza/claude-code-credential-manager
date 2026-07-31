@@ -7,6 +7,47 @@ your second account once.
 
 ## 1. Install
 
+Download the installer for your platform from
+[Releases](https://github.com/MAbbasRaza/claude-code-multi-account-manager/releases/latest) and
+run it. Each installs the `ccm` command, the desktop app and the tray app together.
+
+| Platform | File | What it does |
+|---|---|---|
+| Windows | `ccm-setup-windows.exe` | Installs to `%LOCALAPPDATA%\Programs\ccm`, adds Start Menu shortcuts, and offers to start the tray app at login. Per-user, so no UAC prompt. |
+| macOS | `ccm-macos.pkg` | Installs two apps into `/Applications` and `ccm` into `/usr/local/bin`. Asks for your password. |
+| Ubuntu, Debian | `ccm-linux-amd64.deb` | `sudo apt install ./ccm-linux-amd64.deb`. Adds both apps to your application menu. |
+
+On the Windows components page you can untick the desktop app or the tray app; the command line
+tool is always installed. Unticking the tray app also disables the start-at-login option, since
+that option starts the tray.
+
+### First launch on an unsigned build
+
+These builds are **not signed** by Apple or by a Windows code-signing certificate yet, and both
+operating systems will warn you. The warning is expected, not a sign that something is wrong.
+Verify the file against `SHA256SUMS` from the same release instead of relying on a publisher
+name.
+
+**macOS** refuses to open an unsigned `.pkg` from Finder at all: you get *"Apple could not
+verify this app is free of malware"* with no way past it. Install from Terminal instead:
+
+```bash
+sudo installer -pkg ~/Downloads/ccm-macos.pkg -target /
+```
+
+Or strip the quarantine flag the browser applied, then double-click as normal:
+
+```bash
+xattr -d com.apple.quarantine ~/Downloads/ccm-macos.pkg
+```
+
+**Windows** shows *"Windows protected your PC"* with the Run button hidden. Click **More info**,
+then **Run anyway**. The publisher will read "Unknown publisher".
+
+### Command line only
+
+If you want just the `ccm` command and no desktop apps:
+
 **macOS and Linux**
 
 ```bash
@@ -19,11 +60,14 @@ curl -fsSL https://raw.githubusercontent.com/MAbbasRaza/claude-code-multi-accoun
 irm https://raw.githubusercontent.com/MAbbasRaza/claude-code-multi-account-manager/main/install.ps1 | iex
 ```
 
-Add `CCM_TRAY=1` (or `-Tray` on Windows) if you want the system tray app too.
+Add `CCM_TRAY=1` (or `-Tray` on Windows) for the tray app as well, though these install loose
+binaries rather than real applications: on macOS that means no Dock icon and no application
+identity, which is exactly what `ccm-macos.pkg` exists to provide.
 
-The installer verifies the download against the published `SHA256SUMS`, installs into your home
-directory, and adds it to your `PATH`. It never asks for `sudo` or administrator rights. If it
-tells you to open a new terminal, do that before continuing.
+These two verify the download against the published `SHA256SUMS`, install into your home
+directory, and add it to your `PATH`. Unlike the macOS and Debian packages above, neither ever
+asks for `sudo` or administrator rights. If it tells you to open a new terminal, do that before
+continuing.
 
 Check it worked:
 
@@ -155,9 +199,10 @@ It draws through the browser engine your system already has: WebView2 on Windows
 macOS, WebKitGTK on Linux. Nothing to install, and no OpenGL, which matters on machines where a
 GPU-drawn toolkit fails to start.
 
-Like the tray, it needs cgo, so prebuilt binaries ship for linux/amd64, darwin/arm64 and
-windows/amd64. Building from source on Linux additionally needs `libgtk-3-dev` and
-`libwebkit2gtk-4.1-dev`.
+Like the tray, it needs cgo, so prebuilt binaries ship for linux/amd64, darwin/amd64,
+darwin/arm64 and windows/amd64. The platform installers include it already; on macOS it is the
+`Claude Code Accounts` app in `/Applications`, and on Debian it appears in your application menu.
+Building from source on Linux additionally needs `libgtk-3-dev` and `libwebkit2gtk-4.1-dev`.
 
 ---
 
@@ -172,21 +217,26 @@ To start it automatically:
 ccm autostart enable      # or: disable, status
 ```
 
-The Windows installer ticks this by default; you can untick it during setup, or change it later
-from the tray menu, the desktop app's Settings, or the command above. It registers with whichever
-mechanism your system uses, all per-user and none needing administrator rights:
+It registers with whichever mechanism your system uses, all per-user and none needing
+administrator rights:
 
-| Platform | Mechanism |
-|---|---|
-| Windows | `HKCU\…\CurrentVersion\Run` |
-| macOS | LaunchAgent in `~/Library/LaunchAgents` |
-| Linux | XDG entry in `~/.config/autostart` |
+| Platform | Mechanism | Set up by the installer? |
+|---|---|---|
+| Windows | `HKCU\…\CurrentVersion\Run` | Yes, ticked by default; untick it during setup |
+| macOS | LaunchAgent in `~/Library/LaunchAgents` | No, run the command above |
+| Linux | XDG entry in `~/.config/autostart` | No, run the command above |
 
-`ccm autostart status` prints which one is in use and where the entry lives, so you can remove it
-by hand if you prefer.
+**Only the Windows installer can do this for you, and the asymmetry is deliberate.** That
+installer runs as you. The macOS `.pkg` and the Debian package both run as root, while the entry
+they would need to write is per-user, so there is no correct user for them to register. Rather
+than guess, they leave it to you. You can also change it any time from the tray menu or the
+desktop app's Settings.
 
-The tray app needs cgo, so prebuilt binaries ship only for linux/amd64, darwin/arm64 and
-windows/amd64. On other platforms, build it from source.
+`ccm autostart status` prints which mechanism is in use and where the entry lives, so you can
+remove it by hand if you prefer.
+
+The tray app needs cgo, so prebuilt binaries ship only for linux/amd64, darwin/amd64,
+darwin/arm64 and windows/amd64. On other platforms, build it from source.
 
 ---
 
@@ -273,5 +323,16 @@ the output.
 
 ## Uninstall
 
-Delete the binary, then remove the two directories above. Nothing is written anywhere else except
-your own Claude Code configuration directory.
+| Installed with | Remove with |
+|---|---|
+| `ccm-setup-windows.exe` | Settings > Apps > Claude Code Multi-Account Manager |
+| `ccm-macos.pkg` | `sudo ccm-uninstall` |
+| `ccm-linux-amd64.deb` | `sudo apt remove ccm` |
+| `install.sh`, `install.ps1`, Homebrew, Scoop, manual | Delete the binaries, or use the package manager you installed with |
+
+All of them also undo start-at-login and, on Windows, the `PATH` entry.
+
+**None of them delete your saved accounts.** The vault holds the credentials for every account
+you added, and an uninstall that destroyed it would force a browser sign-in for each one to get
+back. Remove the two directories listed above yourself if you really want them gone. Nothing is
+written anywhere else except your own Claude Code configuration directory.

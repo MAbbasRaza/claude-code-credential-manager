@@ -9,6 +9,12 @@
 /ccm-tray
 /ccm-gui
 
+# Generated at package time from assets/icon.png, not checked in. Unlike
+# assets/icon.ico, which is committed so a normal Windows build needs no
+# windres, this one is only ever produced on macOS by packaging/macos.
+assets/icon.icns
+*.iconset/
+
 # Extension build output
 extension/node_modules/
 extension/out/
