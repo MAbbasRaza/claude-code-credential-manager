@@ -187,7 +187,7 @@ jobs:
           fi
           npx --yes @vscode/vsce package --out ccm-extension.vsix
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: vsix
           path: extension/ccm-extension.vsix
@@ -409,7 +409,7 @@ jobs:
           mkdir -p dist
           go build -trimpath -ldflags "-s -w -X main.version=${version}" -o "dist/${name}" ./cmd/ccm
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: cli-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/
@@ -467,7 +467,7 @@ jobs:
           go build -trimpath -ldflags "-s -w -X main.version=${version}" -o "dist/${name}" ./cmd/ccm-tray
           file "dist/${name}" || true
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: tray-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/
@@ -533,7 +533,7 @@ jobs:
           mkdir -p dist
           go build -trimpath -ldflags "${ldflags}" -o "dist/${name}" ./cmd/ccm-gui
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: gui-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/
@@ -624,7 +624,7 @@ jobs:
           if (Test-Path "$target\ccm.exe") { throw 'uninstall left the executables behind' }
           if (Test-Path 'HKCU:\Software\ccm') { throw 'uninstall left registry state behind' }
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: installer-windows
           path: dist/ccm-setup-windows.exe
@@ -711,7 +711,7 @@ jobs:
             echo "clean install, verify and purge all passed"
           '
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: package-linux
           path: dist/ccm-linux-amd64.deb
@@ -856,7 +856,7 @@ jobs:
           test ! -e /usr/local/bin/ccm
           echo "install, verify and uninstall all passed"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: package-macos
           path: dist/ccm-macos.pkg
