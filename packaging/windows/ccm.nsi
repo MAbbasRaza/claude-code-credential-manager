@@ -1,7 +1,10 @@
 ; NSIS installer for ccm.
 ;
-; Built by scripts/build-installer.ps1, or by hand:
-;   makensis -DVERSION=0.3.0 -DSRCDIR=..\..\bin packaging\windows\ccm.nsi
+; Always built through scripts/build-installer.ps1, which is the only place
+; makensis is invoked so a local build and the release build cannot drift. It
+; derives VERSIONQUAD with scripts/relver and passes absolute paths:
+;
+;   pwsh -File scripts/build-installer.ps1 -Build
 ;
 ; Deliberately a per-user install. RequestExecutionLevel user means no UAC
 ; prompt and no administrator account required, which matches how the rest of
@@ -16,8 +19,20 @@
 !ifndef VERSION
   !define VERSION "0.0.0"
 !endif
+; VIProductVersion needs exactly four numeric parts and will not compile
+; without them, so a tag like v0.3.0-rc1 cannot be used directly. relver
+; supplies this separately from the display version.
+!ifndef VERSIONQUAD
+  !define VERSIONQUAD "0.0.0.0"
+!endif
 !ifndef SRCDIR
   !define SRCDIR "..\..\bin"
+!endif
+; The published asset name carries no version. GitHub's
+; /releases/latest/download/<name> redirect only resolves a fixed filename, and
+; that redirect is what lets the docs link a permanent download URL.
+!ifndef OUTFILE
+  !define OUTFILE "..\..\dist\ccm-setup-windows.exe"
 !endif
 
 !define APPNAME    "Claude Code Multi-Account Manager"
@@ -27,7 +42,7 @@
 !define UNINSTKEY  "Software\Microsoft\Windows\CurrentVersion\Uninstall\${SHORTNAME}"
 
 Name "${APPNAME}"
-OutFile "..\..\dist\ccm-setup-${VERSION}.exe"
+OutFile "${OUTFILE}"
 Unicode True
 RequestExecutionLevel user
 InstallDir "$LOCALAPPDATA\Programs\ccm"
@@ -35,7 +50,7 @@ InstallDirRegKey HKCU "Software\${SHORTNAME}" "InstallDir"
 ShowInstDetails show
 ShowUnInstDetails show
 
-VIProductVersion "${VERSION}.0"
+VIProductVersion "${VERSIONQUAD}"
 VIAddVersionKey "ProductName"     "${APPNAME}"
 VIAddVersionKey "CompanyName"     "${PUBLISHER}"
 VIAddVersionKey "FileDescription" "Switch between Claude Code accounts without signing in again"
